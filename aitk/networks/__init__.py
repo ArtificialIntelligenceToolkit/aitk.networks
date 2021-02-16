@@ -8,4 +8,4 @@
 #
 # ******************************************************
 
-from .network import Network, SequentialNetwork  # noqa: F401
+from .network import Network, SimpleNetwork  # noqa: F401

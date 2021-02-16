@@ -323,6 +323,40 @@ class Network:
                 for index in [self.input_bank_order.index(name) for name in input_names]
             ]
 
+    def predict(self, inputs, format="numpy"):
+        """
+        Propagate input patterns to a bank in the network.
+
+        * format: (str) "numpy", "list", or "image"
+        """
+        if len(self.input_bank_order) > 1:
+            input_names = self._input_layer_names[layer_name]
+            input_vectors = self._extract_inputs(inputs, input_names)
+        else:
+            input_names = self.input_bank_order
+            input_vectors = inputs
+        try:
+            outputs = self._model.predict(np.array(input_vectors))
+        except Exception as exc:
+            input_layers_shapes = [
+                self._get_raw_output_shape(layer_name) for layer_name in input_names
+            ]
+            hints = ", ".join(
+                [
+                    ("%s: %s" % (name, shape))
+                    for name, shape in zip(input_names, input_layers_shapes)
+                ]
+            )
+            raise Exception(
+                "You must supply the inputs for these banks in order and in the right shape: %s"
+                % hints
+            ) from None
+
+        if format == "numpy":
+            return outputs
+        elif format == "list":
+            return outputs.tolist()
+
     def predict_to(self, inputs, layer_name, format="numpy"):
         """
         Propagate input patterns to a bank in the network.
@@ -338,7 +372,7 @@ class Network:
             model = self._predict_models[input_names, layer_name]
             input_vectors = inputs
         try:
-            outputs = model.predict(input_vectors)
+            outputs = model.predict(np.array(input_vectors))
         except Exception as exc:
             input_layers_shapes = [
                 self._get_raw_output_shape(layer_name) for layer_name in input_names
@@ -352,7 +386,7 @@ class Network:
             raise Exception(
                 "You must supply the inputs for these banks in order and in the right shape: %s"
                 % hints
-            ) from exc
+            ) from None
 
         if format == "numpy":
             return outputs
@@ -365,6 +399,27 @@ class Network:
         """
         Propagate patterns from one bank to another bank in the network.
         """
+
+    def display_colormap(self, colormap=None):
+        """
+        Display one, or all of the colormaps available on your system.
+        """
+        if colormap is None:
+            if HTML:
+                for colorname in cm._gen_cmap_registry():
+                    display(colorname, self.show_colormap(colorname))
+            else:
+                raise Exception("you need to install IPython for this function to work")
+        else:
+            width, height = (400, 25)
+            vector = np.arange(0, 1, 0.01)
+            vector = vector.reshape((1, 100))
+            cm_hot = cm.get_cmap(colormap)
+            vector = cm_hot(vector)
+            vector = np.uint8(vector * 255)
+            image = Image.fromarray(vector)
+            image = image.resize((width, height))
+            return image
 
     def display_picture(
         self,
@@ -400,6 +455,8 @@ class Network:
         show_error=False,
         show_targets=False,
         format=None,
+        rotate=False,
+        scale=None,
         **config,
     ):
         """
@@ -422,6 +479,10 @@ class Network:
             >>> net.take_picture([.5, .5])
             <IPython.core.display.HTML object>
         """
+        # This are not sticky; need to set each time:
+        config["rotate"] = rotate
+        config["scale"] = scale
+        # Everything else is sticky:
         self.config.update(config)
 
         try:
@@ -494,9 +555,10 @@ class Network:
             v = np.random.rand(100)
         else:
             v = np.random.rand(*shape)
+
         lo, hi = self._get_act_minmax(layer_name)
-        v *= (lo + hi) / 2.0
-        return v
+        # scale the vector to the min and the max of this layer:
+        return np.interp(v, (v.min(), v.max()), (lo, hi))
 
     def make_image(self, layer_name, vector, colormap=None):
         """
@@ -681,7 +743,7 @@ class Network:
         ):
             return self.config["layers"][layer_name]["colormap"]
         else:
-            return "RdGy"
+            return "gray"
 
     def _get_activation_name(self, layer):
         if hasattr(layer, "activation"):
@@ -1840,12 +1902,43 @@ class Network:
             else:
                 raise AttributeError("no such config item: %r" % item)
 
-    def set_config_layers(self, **layers):
+    def set_config_layers_by_class(self, class_name, **items):
         """
-        Set one or more configurable items in a layers:
+        Set one or more configurable items in layers
+        identified by layer instance type.
+
+        Examples:
+        ```python
+        >>> net.set_config_layers_by_class("Conv", colormap="RdGy")
+        ```
         """
-        for layer_name, items in layers.items():
-            self.set_config_layer(layer_name, **items)
+        for layer in self._layers:
+            if layer.__class__.__name__.lower().startswith(class_name.lower()):
+                self.set_config_layer(layer.name, **items)
+
+    def set_config_layers_by_name(self, name, **items):
+        """
+        Set one or more configurable items in layers
+        identified by layer instance name.
+
+        Examples:
+        ```python
+        >>> net.set_config_layers_by_name("input", colormap="RdGy")
+        ```
+        """
+        for layer in self._layers:
+            if layer.name.lower().startswith(name.lower()):
+                self.set_config_layer(layer.name, **items)
+
+    def set_config_layers(self, **items):
+        """
+        Set one or more configurable items in all layers:
+
+        >>> net.set_config_layers(minmax=(-1, 0))
+
+        """
+        for layer in self._layers:
+            self.set_config_layer(layer.name, **items)
 
     def set_config_layer(self, layer_name, **items):
         """
@@ -1900,11 +1993,11 @@ class Network:
             self._model.optimizer.momentum = momentum
 
 
-class SequentialNetwork(Network):
+class SimpleNetwork(Network):
     def __init__(
         self,
         *layer_sizes,
-        name="BackpropNetwork",
+        name="SimpleNetwork",
         activation="sigmoid",
         loss="mse",
         metrics=None,
@@ -1922,11 +2015,17 @@ class SequentialNetwork(Network):
         def make_layer(index, layer_sizes, activation):
             name = make_name(index, len(layer_sizes))
             if index == 0:
-                return Input(layer_sizes[index], name=name)
+                size = layer_sizes[index]
+                return Input(size, name=name)
             elif layer_sizes[index] == 0:
                 return Flatten(name=name)
             else:
-                return Dense(layer_sizes[index], activation=activation, name=name)
+                size = layer_sizes[index]
+                if isinstance(size, int):
+                    activation_function = activation
+                elif len(size) == 2 and isinstance(size[1], str):
+                    size, activation_function = size
+                return Dense(size, activation=activation_function, name=name)
 
         layers = [
             make_layer(index, layer_sizes, activation)

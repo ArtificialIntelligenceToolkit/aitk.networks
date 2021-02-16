@@ -9,7 +9,7 @@
 # ******************************************************
 
 import matplotlib.pyplot as plt
-from tensorflow.keras.callbacks import Callback
+from tensorflow.keras.callbacks import Callback, EarlyStopping
 
 
 class PlotCallback(Callback):
@@ -28,3 +28,6 @@ class PlotCallback(Callback):
     def on_train_end(self, logs=None):
         if self._figure is not None:
             plt.close()
+
+def make_early_stop(monitor, patience):
+    return EarlyStopping(monitor=monitor, patience=patience)

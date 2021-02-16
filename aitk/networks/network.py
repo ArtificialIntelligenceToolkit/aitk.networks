@@ -24,7 +24,7 @@ from PIL import Image, ImageDraw
 from tensorflow.keras.layers import Dense, Flatten, Input
 from tensorflow.keras.models import Model
 
-from .callbacks import PlotCallback
+from .callbacks import PlotCallback, make_early_stop
 from .utils import (
     get_argument_bindings,
     get_error_colormap,
@@ -178,6 +178,13 @@ class Network:
                         )
 
     def fit(self, *args, **kwargs):
+        """
+        Train the model.
+
+        kwargs:
+            * monitor: (str) metric to monitor to determine whether to stop
+            * patience: (int) number of epochs to wait without improvements until stopping
+        """
         report_rate = 1
         # plot = True
         # if plot:
@@ -185,6 +192,10 @@ class Network:
         #    mpl_backend = matplotlib.get_backend()
         # else:
         #    mpl_backend = None
+
+        # Get any kwargs that are not standard:
+        monitor = kwargs.pop("monitor", None)
+        patience = kwargs.pop("patience", 0)
 
         plot_callback = PlotCallback(self, report_rate)
         kwargs = get_argument_bindings(self._model.fit, args, kwargs)
@@ -194,6 +205,9 @@ class Network:
             callbacks = []
         # add our plot callback to it:
         callbacks.append(plot_callback)
+        # add any other callbacks:
+        if monitor is not None:
+            callbacks.append(make_early_stop(monitor, patience))
         kwargs["callbacks"] = callbacks
         kwargs["verbose"] = 0
         # call underlying model fit:

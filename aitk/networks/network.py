@@ -185,7 +185,6 @@ class Network:
             * monitor: (str) metric to monitor to determine whether to stop
             * patience: (int) number of epochs to wait without improvements until stopping
         """
-        report_rate = 1
         # plot = True
         # if plot:
         #    import matplotlib
@@ -194,6 +193,7 @@ class Network:
         #    mpl_backend = None
 
         # Get any kwargs that are not standard:
+        report_rate = kwargs.pop("report_rate", 1)
         # Keras Early stopping:
         monitor = kwargs.pop("monitor", None)
         # Early stopping and Stop on Accuracy, Val_accuracy
@@ -267,6 +267,9 @@ class Network:
 
         self._history.append((self._epoch, logs))
         self._epoch += 1
+
+        if (self._epoch % report_rate) != 0:
+            return
 
         metrics = [list(history[1].keys()) for history in self._history]
         metrics = set([item for sublist in metrics for item in sublist])
@@ -436,7 +439,7 @@ class Network:
         if colormap is None:
             if HTML:
                 for colorname in cm._gen_cmap_registry():
-                    display(colorname, self.show_colormap(colorname))
+                    display(colorname, self.display_colormap(colorname))
             else:
                 raise Exception("you need to install IPython for this function to work")
         else:

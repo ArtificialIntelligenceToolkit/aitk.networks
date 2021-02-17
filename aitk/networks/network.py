@@ -24,7 +24,7 @@ from PIL import Image, ImageDraw
 from tensorflow.keras.layers import Dense, Flatten, Input
 from tensorflow.keras.models import Model
 
-from .callbacks import PlotCallback, make_early_stop
+from .callbacks import PlotCallback, make_early_stop, make_stop
 from .utils import (
     get_argument_bindings,
     get_error_colormap,
@@ -194,8 +194,15 @@ class Network:
         #    mpl_backend = None
 
         # Get any kwargs that are not standard:
+        # Keras Early stopping:
         monitor = kwargs.pop("monitor", None)
+        # Early stopping and Stop on Accuracy, Val_accuracy
         patience = kwargs.pop("patience", 0)
+        # Our stopping criteria:
+        accuracy = kwargs.pop("accuracy", None)
+        val_accuracy = kwargs.pop("val_accuracy", None)
+        loss = kwargs.pop("loss", None)
+        val_loss = kwargs.pop("val_loss", None)
 
         plot_callback = PlotCallback(self, report_rate)
         kwargs = get_argument_bindings(self._model.fit, args, kwargs)
@@ -208,6 +215,14 @@ class Network:
         # add any other callbacks:
         if monitor is not None:
             callbacks.append(make_early_stop(monitor, patience))
+        if accuracy is not None:
+            callbacks.append(make_stop("accuracy", accuracy, patience, False))
+        if val_accuracy is not None:
+            callbacks.append(make_stop("accuracy", val_accuracy, patience, True))
+        if loss is not None:
+            callbacks.append(make_stop("loss", loss, patience, False))
+        if val_loss is not None:
+            callbacks.append(make_stop("loss", val_loss, patience, True))
         kwargs["callbacks"] = callbacks
         kwargs["verbose"] = 0
         # call underlying model fit:

@@ -227,10 +227,20 @@ class Network:
         kwargs["verbose"] = 0
         # call underlying model fit:
         try:
-            return self._model.fit(**kwargs)
+            history = self._model.fit(**kwargs)
         except KeyboardInterrupt:
             plt.close()
             raise KeyboardInterrupt() from None
+
+        ## FIXME: make sure there is at least one:
+
+        metrics = {key: history.history[key][-1] for key in history.history}
+
+        ## FIXME: getting epochs by keyword:
+
+        print("Epoch %d/%d %s" % (len(history.epoch), kwargs["epochs"], " - ".join(
+            ["%s: %s" % (key, value) for (key, value) in metrics.items()])))
+        return history
 
     def in_console(self, mpl_backend: str) -> bool:
         """
@@ -258,21 +268,29 @@ class Network:
             "NbAgg",
         ]
 
-    def plot_results(self, callback, logs, report_rate):
+    def plot_results(self, callback, logs, report_rate=None):
         """
         plots loss and accuracy on separate graphs, ignoring any other
         metrics for now.
         """
         format = "svg"
 
-        self._history.append((self._epoch, logs))
-        self._epoch += 1
+        if report_rate is not None: # just draw, not update
+            self._history.append((self._epoch, logs))
+            self._epoch += 1
 
-        if (self._epoch % report_rate) != 0:
-            return
+            if (self._epoch % report_rate) != 0:
+                return
 
         metrics = [list(history[1].keys()) for history in self._history]
         metrics = set([item for sublist in metrics for item in sublist])
+
+        def match_acc(name):
+            return (name.endswith("acc") or
+                    name.endswith("accuracy"))
+
+        def match_val(name):
+            return name.startswith("val_")
 
         if callback._figure is not None:
             # figure and axes objects have already been created
@@ -282,12 +300,7 @@ class Network:
                 acc_ax.clear()
         else:
             # first time called, so create figure and axes objects
-            if (
-                ("acc" in metrics)
-                or ("val_acc" in metrics)
-                or ("accuracy" in metrics)
-                or ("val_accuary" in metrics)
-            ):
+            if any([match_acc(metric) for metric in metrics]):
                 fig, (loss_ax, acc_ax) = plt.subplots(1, 2, figsize=(10, 4))
             else:
                 fig, loss_ax = plt.subplots(1)
@@ -309,9 +322,9 @@ class Network:
                 loss_ax.plot(x_values, y_values, label=metric, color="r")  # red
             elif metric == "val_loss":
                 loss_ax.plot(x_values, y_values, label=metric, color="orange")
-            elif metric in ["acc", "accuracy"] and acc_ax is not None:
+            elif match_acc(metric) and not match_val(metric) and acc_ax is not None:
                 acc_ax.plot(x_values, y_values, label=metric, color="b")  # blue
-            elif metric in ["val_acc", "val_accuracy"] and acc_ax is not None:
+            elif match_acc(metric) and match_val(metric)  and acc_ax is not None:
                 acc_ax.plot(x_values, y_values, label=metric, color="c")  # cyan
             # FIXME: add a chart for each metric
             # else:
@@ -320,12 +333,15 @@ class Network:
         loss_ax.set_ylim(bottom=0)
         loss_ax.set_title("%s: Training Loss" % (self.name,))
         loss_ax.set_xlabel("Epoch")
+        loss_ax.set_ylabel("Loss")
         loss_ax.legend(loc="best")
         if acc_ax is not None:
             acc_ax.set_ylim([-0.1, 1.1])
-            acc_ax.set_title("%s: Traning Accuracy" % (self.name,))
+            acc_ax.set_title("%s: Training Accuracy" % (self.name,))
             acc_ax.set_xlabel("Epoch")
+            acc_ax.set_ylabel("Accuracy")
             acc_ax.legend(loc="best")
+
 
         if True or format == "svg":
             # if (callback is not None and not callback.in_console) or format == "svg":

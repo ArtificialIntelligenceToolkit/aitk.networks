@@ -12,6 +12,16 @@ import matplotlib.pyplot as plt
 from tensorflow.keras.callbacks import Callback, EarlyStopping
 
 
+def match_acc(name):
+    return (name.endswith("acc") or
+            name.endswith("accuracy"))
+
+def match_loss(name):
+    return name == "loss"
+
+def match_val(name):
+    return name.startswith("val_")
+
 class PlotCallback(Callback):
     def __init__(self, network, report_rate):
         super().__init__()
@@ -26,11 +36,12 @@ class PlotCallback(Callback):
         self._network.plot_results(self, logs, self._report_rate)
 
     def on_train_end(self, logs=None):
+        self._network.plot_results(self, logs)
         if self._figure is not None:
             plt.close()
 
 def make_early_stop(monitor, patience):
-    return EarlyStopping(monitor=monitor, patience=patience)
+    return EarlyStopping(monitor=monitor, patience=patience, verbose=True)
 
 def make_stop(metric, goal, patience, use_validation):
     return StopWhen(metric, goal, patience, use_validation)
@@ -45,18 +56,6 @@ class StopWhen(Callback):
         self.wait = 0
         self.verbose = verbose
 
-    def get_metric_names(self):
-        if self.metric.startswith("acc"):
-            if self.use_validation:
-                return ["val_accuracy", "val_acc"]
-            else:
-                return ["accuracy", "acc"]
-        else:
-            if self.use_validation:
-                return ["val_loss", "val_loss"]
-            else:
-                return ["loss"]
-
     def on_train_begin(self, logs=None):
         self.wait = 0
         self.i_stopped_it = False
@@ -68,18 +67,29 @@ class StopWhen(Callback):
             print("Stopped because %s beat goal of %s" % (item, self.goal))
 
     def compare(self, value, goal):
-        if self.metric.startswith("acc"):
+        # self.metric is either "accuracy" or "loss"
+        if self.metric == "accuracy":
             return value >= goal
         else:
             return value <= goal
 
     def on_epoch_end(self, epoch, logs=None):
         if logs is not None:
-            metric_value = None
-            for key in self.get_metric_names():
-                if key in logs:
-                    metric_value = logs[key]
-                    break
+            for key in logs:
+                if self.use_validation:
+                    if self.metric == "accuracy" and match_acc(key) and match_val(key):
+                        metric_value = logs[key]
+                        break
+                    elif self.metric == "loss" and match_loss(key) and match_val(key):
+                        metric_value = logs[key]
+                        break
+                else:
+                    if self.metric == "accuracy" and match_acc(key) and not match_val(key):
+                        metric_value = logs[key]
+                        break
+                    elif self.metric == "loss" and match_loss(key) and not match_val(key):
+                        metric_value = logs[key]
+                        break
             if metric_value is not None:
                 if self.compare(metric_value, self.goal):
                     if self.wait >= self.patience:

@@ -69,7 +69,7 @@ class Network:
         self._svg = None
         self._history = []
         self._epoch = 0
-        self.tolerance = 0.1
+        self._tolerance = 0.1
         self.config = {
             "name": self._model.name,  # for svg title
             "class_id": "keras-network",  # for svg network classid
@@ -108,13 +108,13 @@ class Network:
             "dashboard.features.scale": 1.0,
             "layers": {},
             # layer_name: {vshape, feature, keep_aspect_ratio, visible
-            # colormap, minmax, border_color, border_width}
+            # colormap, border_color, border_width}
         }
         # Setup layer config dicts:
         self.config["layers"] = {layer.name: {} for layer in self._layers}
-        # Set the minmax for each layer:
+        # Set the colormap, etc for each layer:
         self.initialize()
-        # Override minmax etc:
+        # Override settings:
         self.set_config(**config)
 
     def __getattr__(self, attr):
@@ -125,28 +125,30 @@ class Network:
 
     def initialize(self, inputs=None, reset=True):
         """
-        Set minmax for each layer based on inputs or
+        Set colormap for each layer based on inputs or
         activation functions per layer.
 
         If inputs is None, just make best guess for all layers.
 
         If inputs is not None, use these for input layer
-        minmax, and all other layers get best guess.
+        colormap, and all other layers get best guess.
 
-        If reset is True, don't use previous minmax
+        If reset is True, don't use previous colormap
         for input layers, but sample from inputs again.
         If reset is False, consider previous input
-        layer minmaxes with new input values.
+        layer colormap's with new input values.
         """
         if inputs is None:
-            # We don't have direct values, so we base minmax
+            # We don't have direct values, so we base colormap
             # on activation output ranges
             for layer in self._layers:
                 if layer.name not in self.config["layers"]:
                     self.config["layers"][layer.name] = {}
-                self.config["layers"][layer.name]["minmax"] = self._get_act_minmax(
-                    layer.name
-                )
+                if self._get_layer_type(layer.name) == "input":
+                    self.config["layers"][layer.name]["colormap"] = ("gray", -2, 2)
+                else:
+                    minmax = self._get_act_minmax(layer.name)
+                    self.config["layers"][layer.name]["colormap"] = ("gray", minmax[0], minmax[1])
         else:
             # If reset is true, we set to extremes so any value will adjust
             # Only do this on input layers:
@@ -155,25 +157,27 @@ class Network:
                     if self._get_layer_type(layer.name) == "input":
                         if layer.name not in self.config["layers"]:
                             self.config["layers"][layer.name] = {}
-                        self.config["layers"][layer.name]["minmax"] = (
-                            float("+inf"),
-                            float("-inf"),
+                        self.config["layers"][layer.name]["colormap"] = (
+                            "gray",
+                            float("+inf"), # extreme too big
+                            float("-inf"), # extreme too small
                         )
             # Now we set the minmax for input layer, based on past values
             # or extremes:
             for layer in self._layers:
                 if self._get_layer_type(layer.name) == "input":
                     outputs = self.predict_to(inputs, layer.name)
-                    min_orig, max_orig = self.config["layers"][layer.name]["minmax"]
+                    color_orig, min_orig, max_orig = self.config["layers"][layer.name]["colormap"]
                     min_new, max_new = (
                         min(outputs.min(), min_orig),
                         max(outputs.max(), max_orig),
                     )
                     if min_new != max_new:
-                        self.config["layers"][layer.name]["minmax"] = (min_new, max_new)
+                        self.config["layers"][layer.name]["colormap"] = (color_orig, min_new, max_new)
                     else:
                         # Don't let them be equal:
-                        self.config["layers"][layer.name]["minmax"] = (
+                        self.config["layers"][layer.name]["colormap"] = (
+                            color_orig,
                             min_new - 1,
                             max_new + 1,
                         )
@@ -605,7 +609,7 @@ class Network:
         else:
             v = np.random.rand(*shape)
 
-        lo, hi = self._get_act_minmax(layer_name)
+        color, lo, hi = self._get_colormap(layer_name)
         # scale the vector to the min and the max of this layer:
         return np.interp(v, (v.min(), v.max()), (lo, hi))
 
@@ -642,22 +646,23 @@ class Network:
                             args.append(s)
                             count += 1
             vector = vector[tuple(args)]
+        if colormap is None:
+            color, mini, maxi = self._get_colormap(layer_name)
+        else:
+            color, mini, maxi = colormap
         vector = scale_output_for_image(
-            vector, self._get_act_minmax(layer_name), truncate=True
+            vector, (mini, maxi), truncate=True
         )
         if len(vector.shape) == 1:
             vector = vector.reshape((1, vector.shape[0]))
         size = self.config.get("pixels_per_unit", 1)
         new_width = vector.shape[0] * size  # in, pixels
         new_height = vector.shape[1] * size  # in, pixels
-        if colormap is None:
-            colormap = self._get_colormap(layer_name)
-        if colormap is not None:
-            try:
-                cm_hot = cm.get_cmap(colormap)
-            except Exception:
-                cm_hot = cm.get_cmap("RdGy")
-            vector = cm_hot(vector)
+        try:
+            cm_hot = cm.get_cmap(color)
+        except Exception:
+            cm_hot = cm.get_cmap("gray")
+        vector = cm_hot(vector)
         vector = np.uint8(vector * 255)
         if max(vector.shape) <= self.config["max_draw_units"]:
             # Need to make it bigger, to draw circles:
@@ -769,10 +774,10 @@ class Network:
             layer.__class__.__name__,
         )
         if activation:
-            retval += "\nActivation function: %s" % activation
-        retval += "\nOutput range: %s" % (
-            format_range(self._get_act_minmax(layer_name),)
-        )
+            retval += "\nAct function: %s" % activation
+            retval += "\nAct output range: %s" % (
+                format_range(self._get_act_minmax(layer_name),)
+            )
         retval += "\nShape = %s" % (self._get_raw_output_shape(layer_name),)
         return retval
 
@@ -792,7 +797,7 @@ class Network:
         ):
             return self.config["layers"][layer_name]["colormap"]
         else:
-            return "gray"
+            return ("gray", -2, 2)
 
     def _get_activation_name(self, layer):
         if hasattr(layer, "activation"):
@@ -804,31 +809,25 @@ class Network:
 
         Note: +/- 2 represents infinity
         """
-        if (
-            layer_name in self.config["layers"]
-            and "minmax" in self.config["layers"][layer_name]
-        ):
-            return self.config["layers"][layer_name]["minmax"]
-        else:
-            # FIXME: uses -2,2 for unbounded, unknown range values
-            layer = self[layer_name]
-            if layer.__class__.__name__ == "Flatten":
-                in_layer = self.incoming_layers(layer_name)[0]
-                return self._get_act_minmax(in_layer.name)
-            elif self._get_layer_type(layer_name) == "input":
+        layer = self[layer_name]
+        if layer.__class__.__name__ == "Flatten":
+            in_layer = self.incoming_layers(layer_name)[0]
+            return self._get_act_minmax(in_layer.name)
+        elif self._get_layer_type(layer_name) == "input":
+            color, mini, maxi = self._get_colormap(layer)
+            return (mini, maxi)
+        else:  # try to get from activation function
+            activation = self._get_activation_name(layer)
+            if activation in ["tanh", "softsign"]:
+                return (-1, +1)
+            elif activation in ["sigmoid", "softmax", "hard_sigmoid"]:
+                return (0, +1)
+            elif activation in ["relu", "elu", "softplus"]:
+                return (0, +2)
+            elif activation in ["selu", "linear"]:
                 return (-2, +2)
-            else:  # try to get from activation function
-                activation = self._get_activation_name(layer)
-                if activation in ["tanh", "softsign"]:
-                    return (-1, +1)
-                elif activation in ["sigmoid", "softmax", "hard_sigmoid"]:
-                    return (0, +1)
-                elif activation in ["relu", "elu", "softplus"]:
-                    return (0, +2)
-                elif activation in ["selu", "linear"]:
-                    return (-2, +2)
-                else:  # default, or unknown activation function
-                    return (-2, +2)
+            else:  # default, or unknown activation function
+                return (-2, +2)
 
     def _get_border_color(self, layer_name):
         if (
@@ -1864,14 +1863,14 @@ class Network:
                 if self._get_layer_type(layer_name) == "output":
                     if targets is not None:
                         # Target image, targets set above:
-                        target_colormap = "grey"  # FIXME: self[layer_name].colormap
+                        target_colormap = ("grey", -2, 2)  # FIXME: self[layer_name].colormap
                         target_bank = targets[self.output_bank_order.index(layer_name)]
                         target_array = np.array(target_bank)
                         target_image = self.make_image(
                             layer_name, target_array, target_colormap
                         )
                         # Error image, error set above:
-                        error_colormap = get_error_colormap()
+                        error_colormap = (get_error_colormap(), -2, 2) # FIXME
                         error_bank = errors[self.output_bank_order.index(layer_name)]
                         error_array = np.array(error_bank)
                         error_image = self.make_image(
@@ -1958,7 +1957,7 @@ class Network:
 
         Examples:
         ```python
-        >>> net.set_config_layers_by_class("Conv", colormap="RdGy")
+        >>> net.set_config_layers_by_class("Conv", colormap=("RdGy", -1, 1))
         ```
         """
         for layer in self._layers:
@@ -1972,7 +1971,7 @@ class Network:
 
         Examples:
         ```python
-        >>> net.set_config_layers_by_name("input", colormap="RdGy")
+        >>> net.set_config_layers_by_name("input", colormap=("RdGy", -1, 1))
         ```
         """
         for layer in self._layers:
@@ -1983,7 +1982,7 @@ class Network:
         """
         Set one or more configurable items in all layers:
 
-        >>> net.set_config_layers(minmax=(-1, 0))
+        >>> net.set_config_layers(colormap=("plasma", -1, 0))
 
         """
         for layer in self._layers:
@@ -1993,19 +1992,34 @@ class Network:
         """
         Set one or more configurable items in a layer:
         """
+        proper_items = {
+            "vshape": ("integer", "integer"),
+            "feature": "integer",
+            "keep_aspect_ratio": "boolean",
+            "visible": "boolean",
+            "colormap": ("string", "number", "number"),
+            "border_color": "string",
+            "border_width": "integer",
+        }
+        def validate_type(value, format):
+            if format == "integer":
+                return isinstance(value, int)
+            elif format == "number":
+                return isinstance(value, (int, float))
+            elif format == "string":
+                return isinstance(value, str)
+            elif format == "boolean":
+                return isinstance(value, bool)
+            else:
+                return all([validate_type(v,f) for v,f in zip(value, format)])
+
         if layer_name in self.config["layers"]:
             for item in items:
-                if item in [
-                    "vshape",
-                    "feature",
-                    "keep_aspect_ratio",
-                    "visible",
-                    "colormap",
-                    "minmax",
-                    "border_color",
-                    "border_width",
-                ]:
-                    self.config["layers"][layer_name][item] = items[item]
+                if item in proper_items:
+                    if validate_type(items[item], proper_items[item]):
+                        self.config["layers"][layer_name][item] = items[item]
+                    else:
+                        raise AttributeError("invalid form for: %r; should be: %s" % (item, proper_items[item]))
                 else:
                     raise AttributeError("no such config layer item: %r" % item)
         else:
@@ -2018,24 +2032,24 @@ class Network:
         if hasattr(self._model, "optimizer") and hasattr(self._model.optimizer, "lr"):
             self._model.optimizer.lr = learning_rate
 
-    def get_metric(self, name):
-        if name == "tolerance_accuracy":
-            def tolerance_accuracy(targets, outputs):
-                return K.mean(
-                    K.all(
-                        K.less_equal(K.abs(targets - outputs),
-                                     self.tolerance), axis=-1),
-                    axis=-1)
-            return tolerance_accuracy
-        else:
-            return name
-
     def get_learning_rate(self):
         """
         Sometimes called `epsilon`.
         """
         if hasattr(self._model, "optimizer") and hasattr(self._model.optimizer, "lr"):
             return self._model.optimizer.lr.numpy()
+
+    def get_metric(self, name):
+        if name == "tolerance_accuracy":
+            def tolerance_accuracy(targets, outputs):
+                return K.mean(
+                    K.all(
+                        K.less_equal(K.abs(targets - outputs),
+                                     self._tolerance), axis=-1),
+                    axis=-1)
+            return tolerance_accuracy
+        else:
+            return name
 
     def get_momentum(self):
         """
@@ -2053,6 +2067,15 @@ class Network:
         ):
             self._model.optimizer.momentum = momentum
 
+    def get_tolerance(self):
+        """
+        """
+        return self._tolerance
+
+    def set_tolerance(self, tolerance):
+        """
+        """
+        self._tolerance = tolerance
 
 class SimpleNetwork(Network):
     def __init__(

@@ -2048,6 +2048,7 @@ class SimpleNetwork(Network):
         name="SimpleNetwork",
         activation="sigmoid",
         loss="mse",
+        optimizer="sgd",
         metrics=None,
     ):
         def make_name(index, total):
@@ -2083,11 +2084,16 @@ class SimpleNetwork(Network):
         for layer in layers[1:]:
             current_layer = layer(current_layer)
         model = Model(inputs=layers[0], outputs=current_layer, name=name)
-        model.compile(optimizer=self._make_optimizer(), loss=loss, metrics=metrics)
+        if metrics is None:
+            metrics = ["accuracy"]
+        model.compile(optimizer=self._make_optimizer(optimizer), loss=loss, metrics=metrics)
         super().__init__(model)
 
-    def _make_optimizer(self):
+    def _make_optimizer(self, optimizer):
         # Get optimizer with some defaults
-        return tf.keras.optimizers.SGD(
-            learning_rate=0.1, momentum=0.9, nesterov=False, name="SGD"
-        )
+        if optimizer == "sgd":
+            return tf.keras.optimizers.SGD(
+                learning_rate=0.1, momentum=0.9, nesterov=False, name="SGD"
+            )
+        else:
+            return optimizer

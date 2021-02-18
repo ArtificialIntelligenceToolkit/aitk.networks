@@ -69,6 +69,7 @@ class Network:
         self._svg = None
         self._history = []
         self._epoch = 0
+        self.tolerance = 0.1
         self.config = {
             "name": self._model.name,  # for svg title
             "class_id": "keras-network",  # for svg network classid
@@ -2017,6 +2018,18 @@ class Network:
         if hasattr(self._model, "optimizer") and hasattr(self._model.optimizer, "lr"):
             self._model.optimizer.lr = learning_rate
 
+    def get_metric(self, name):
+        if name == "tolerance_accuracy":
+            def tolerance_accuracy(targets, outputs):
+                return K.mean(
+                    K.all(
+                        K.less_equal(K.abs(targets - outputs),
+                                     self.tolerance), axis=-1),
+                    axis=-1)
+            return tolerance_accuracy
+        else:
+            return name
+
     def get_learning_rate(self):
         """
         Sometimes called `epsilon`.
@@ -2085,7 +2098,9 @@ class SimpleNetwork(Network):
             current_layer = layer(current_layer)
         model = Model(inputs=layers[0], outputs=current_layer, name=name)
         if metrics is None:
-            metrics = ["accuracy"]
+            metrics = ["tolerance_accuracy"]
+        # Replaced special named metrics with ours:
+        metrics = [self.get_metric(name) for name in metrics]
         model.compile(optimizer=self._make_optimizer(optimizer), loss=loss, metrics=metrics)
         super().__init__(model)
 

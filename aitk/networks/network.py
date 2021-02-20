@@ -484,6 +484,9 @@ class Network:
         clear=True,
         **config,
     ):
+        """
+        Inputs and targets are for a single pattern.
+        """
         picture = self.take_picture(
             inputs=inputs,
             targets=targets,
@@ -514,6 +517,8 @@ class Network:
     ):
         """
         Create an SVG of the network given some inputs (optional).
+
+        Inputs and targets are for a single pattern.
 
         Arguments:
             inputs: input values to propagate
@@ -881,6 +886,10 @@ class Network:
     def to_svg(self, inputs=None, targets=None):
         """
         """
+        # First, turn single patterns into a dataset:
+        inputs = np.array([inputs])
+        if targets is not None:
+            targets = np.array([targets])
         struct = self.build_struct(inputs, targets)
         templates = get_templates(self.config)
         # get the header:

@@ -48,6 +48,7 @@ class Network:
     """
 
     def __init__(self, model, **config):
+        self._state = {"tolerance_accuracy_used": False}
         self._model = model
         # Place to put models between layers:
         self._predict_models = {}
@@ -375,6 +376,18 @@ class Network:
                 inputs[index]
                 for index in [self.input_bank_order.index(name) for name in input_names]
             ]
+
+    def compile(self, *args, **kwargs):
+        """
+        """
+        # First, handle any special names:
+        metrics = kwargs.pop("metrics", [])
+        if len(metrics) > 0:
+            metrics = [self.get_metric(metric) for metric in metrics]
+            kwargs["metrics"] = metrics
+        # Let the standard keras model do the rest:
+        return self._model.compile(*args, **kwargs)
+
 
     def predict(self, inputs, format="numpy"):
         """
@@ -890,6 +903,7 @@ class Network:
         inputs = np.array([inputs])
         if targets is not None:
             targets = np.array([targets])
+        # Next, build the structures:
         struct = self.build_struct(inputs, targets)
         templates = get_templates(self.config)
         # get the header:
@@ -2040,6 +2054,8 @@ class Network:
         """
         if hasattr(self._model, "optimizer") and hasattr(self._model.optimizer, "lr"):
             self._model.optimizer.lr = learning_rate
+        else:
+            print("WARNING: you need to use an optimizer with lr")
 
     def get_learning_rate(self):
         """
@@ -2047,9 +2063,12 @@ class Network:
         """
         if hasattr(self._model, "optimizer") and hasattr(self._model.optimizer, "lr"):
             return self._model.optimizer.lr.numpy()
+        else:
+            print("WARNING: you need to use an optimizer with lr")
 
     def get_metric(self, name):
         if name == "tolerance_accuracy":
+            self._state["tolerance_accuracy_used"] = True
             def tolerance_accuracy(targets, outputs):
                 return K.mean(
                     K.all(
@@ -2067,6 +2086,8 @@ class Network:
             self._model.optimizer, "momentum"
         ):
             return self._model.optimizer.momentum.numpy()
+        else:
+            print("WARNING: you need to use an optimizer with momentum")
 
     def set_momentum(self, momentum):
         """
@@ -2075,15 +2096,22 @@ class Network:
             self._model.optimizer, "momentum"
         ):
             self._model.optimizer.momentum = momentum
+        else:
+            print("WARNING: you need to use an optimizer with momentum")
+
 
     def get_tolerance(self):
         """
         """
+        if not self._state["tolerance_accuracy_used"]:
+            print("WARNING: you need Network.compile(metrics=['tolerance_accuracy']) to use tolerance")
         return self._tolerance
 
     def set_tolerance(self, tolerance):
         """
         """
+        if not self._state["tolerance_accuracy_used"]:
+            print("WARNING: you need Network.compile(metrics=['tolerance_accuracy']) to use tolerance")
         self._tolerance = tolerance
 
 class SimpleNetwork(Network):

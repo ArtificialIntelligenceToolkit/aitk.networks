@@ -48,7 +48,7 @@ class Network:
     """
 
     def __init__(self, model, **config):
-        self._state = {"tolerance_accuracy_used": False}
+        self._init_state()
         self._model = model
         # Place to put models between layers:
         self._predict_models = {}
@@ -123,6 +123,10 @@ class Network:
 
     def __getitem__(self, layer_name):
         return self._layers_map.get(layer_name, None)
+
+    def _init_state(self):
+        if "_state" not in dir(self):
+            self._state = {"tolerance_accuracy_used": False}
 
     def initialize(self, inputs=None, reset=True):
         """
@@ -2160,6 +2164,7 @@ class SimpleNetwork(Network):
         if metrics is None:
             metrics = ["tolerance_accuracy"]
         # Replaced special named metrics with ours:
+        super()._init_state()
         metrics = [self.get_metric(name) for name in metrics]
         model.compile(optimizer=self._make_optimizer(optimizer), loss=loss, metrics=metrics)
         super().__init__(model)

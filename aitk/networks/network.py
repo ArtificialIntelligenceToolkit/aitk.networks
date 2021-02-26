@@ -2052,6 +2052,47 @@ class Network:
         else:
             raise AttributeError("no such config layer: %r" % layer_name)
 
+    def get_weights(self, flat=False):
+        """
+        Return the weights of the entire network.
+
+        Args:
+            flat: (bool) if True, return the weights
+                as a single dimensional array.
+        """
+        if flat:
+            array = []
+            for layer in self._model.layers:
+                for weight in layer.get_weights():
+                    array.extend(weight.flatten())
+            return array
+        else:
+            return self._model.get_weights()
+
+    def set_weights(self, weights, flat=True):
+        """
+        Set the weights in a network.
+
+        Args:
+            weights: a list of weights, or a single
+                array
+            flat: (bool) if True, the weights are a flat
+                array
+        """
+        if flat:
+            current = 0
+            for layer in self._model.layers:
+                orig = layer.get_weights()
+                new_weights = []
+                for item in orig:
+                    total = functools.reduce(operator.mul, item.shape, 1)
+                    w = np.array(weights[current:current + total])
+                    new_weights.append(w.reshape(item.shape))
+                    current += total
+                layer.set_weights(new_weights)
+        else:
+            self._model.set_weights(weights)
+
     def set_learning_rate(self, learning_rate):
         """
         Sometimes called `epsilon`.

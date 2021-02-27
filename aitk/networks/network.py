@@ -24,7 +24,7 @@ from PIL import Image, ImageDraw
 from tensorflow.keras.layers import Dense, Flatten, Input
 from tensorflow.keras.models import Model
 
-from .callbacks import PlotCallback, make_early_stop, make_stop
+from .callbacks import PlotCallback, make_early_stop, make_stop, make_save
 from .utils import (
     get_argument_bindings,
     get_error_colormap,
@@ -68,7 +68,7 @@ class Network:
         self._build_predict_models()
         # For saving HTML for watchers
         self._svg = None
-        self._history = []
+        self._history = {"weights": [], "metrics": []}
         self._epoch = 0
         self._tolerance = 0.1
         self.config = {
@@ -126,7 +126,10 @@ class Network:
 
     def _init_state(self):
         if "_state" not in dir(self):
-            self._state = {"tolerance_accuracy_used": False}
+            self._state = {
+                "tolerance_accuracy_used": False,
+                "pca": {},
+            }
 
     def initialize(self, inputs=None, reset=True):
         """
@@ -204,8 +207,6 @@ class Network:
 
         # Get any kwargs that are not standard:
         report_rate = kwargs.pop("report_rate", 1)
-        # Keras Early stopping:
-        monitor = kwargs.pop("monitor", None)
         # Early stopping and Stop on Accuracy, Val_accuracy
         patience = kwargs.pop("patience", 0)
         # Our stopping criteria:
@@ -213,6 +214,11 @@ class Network:
         val_accuracy = kwargs.pop("val_accuracy", None)
         loss = kwargs.pop("loss", None)
         val_loss = kwargs.pop("val_loss", None)
+        # Monitoring callbacks:
+        # Save weights:
+        save = kwargs.pop("save", 0)
+        # Keras Early stopping:
+        monitor = kwargs.pop("monitor", None)
 
         plot_callback = PlotCallback(self, report_rate)
         kwargs = get_argument_bindings(self._model.fit, args, kwargs)
@@ -225,6 +231,8 @@ class Network:
         # add any other callbacks:
         if monitor is not None:
             callbacks.append(make_early_stop(monitor, patience))
+        if save > 0:
+            callbacks.append(make_save(self, save))
         if accuracy is not None:
             callbacks.append(make_stop("accuracy", accuracy, patience, False))
         if val_accuracy is not None:
@@ -246,9 +254,13 @@ class Network:
 
         metrics = {key: history.history[key][-1] for key in history.history}
 
+        if save > 0:
+            # Save one last time: # FIXME: self._epoch is set in Plot callback
+            self._history["weights"].append((self._epoch, self.network.get_weights()))
+
         ## FIXME: getting epochs by keyword:
 
-        print("Epoch %d/%d %s" % (len(history.epoch), kwargs["epochs"], " - ".join(
+        print("Epoch %d/%d %s" % (self._epoch, kwargs["epochs"], " - ".join(
             ["%s: %s" % (key, value) for (key, value) in metrics.items()])))
         return history
 
@@ -278,7 +290,7 @@ class Network:
             "NbAgg",
         ]
 
-    def plot_results(self, callback, logs, report_rate=None):
+    def plot_results(self, callback, logs, report_rate=None, clear=True):
         """
         plots loss and accuracy on separate graphs, ignoring any other
         metrics for now.
@@ -286,13 +298,13 @@ class Network:
         format = "svg"
 
         if report_rate is not None: # just draw, not update
-            self._history.append((self._epoch, logs))
+            self._history["metrics"].append((self._epoch, logs))
             self._epoch += 1
 
             if (self._epoch % report_rate) != 0:
                 return
 
-        metrics = [list(history[1].keys()) for history in self._history]
+        metrics = [list(history[1].keys()) for history in self._history["metrics"]]
         metrics = set([item for sublist in metrics for item in sublist])
 
         def match_acc(name):
@@ -320,7 +332,7 @@ class Network:
         def get_xy(name):
             return [
                 (history[0], history[1][name])
-                for history in self._history
+                for history in self._history["metrics"]
                 if name in history[1]
             ]
 
@@ -359,7 +371,8 @@ class Network:
             plt.savefig(bytes, format="svg")
             img_bytes = bytes.getvalue()
             if HTML is not None:
-                clear_output(wait=True)
+                if clear:
+                    clear_output(wait=True)
                 display(HTML(img_bytes.decode()))
             else:
                 raise Exception("need to install `IPython` to display matplotlib plots")
@@ -427,6 +440,94 @@ class Network:
         elif format == "list":
             return outputs.tolist()
 
+    def set_pca_spaces(self, inputs):
+        """
+        Make the pca_space with the current weights.
+        """
+        from sklearn.decomposition import PCA
+
+        for layer in self.layers:
+            pca = PCA(2)
+            hidden_raw = self.predict_to(inputs, layer.name)
+            pca_space = pca.fit(hidden_raw)
+            self._state["pca"][layer.name] = pca_space
+
+    def get_input_length(self, inputs):
+        if len(self.input_bank_order) == 1:
+            return len(inputs)
+        else:
+            return len(inputs[0])
+
+    def predict_pca_to(self, inputs, layer_name, colors):
+        if layer_name not in self._state["pca"]:
+            raise Exception("Need to set_pca_spaces first")
+
+        hidden_raw = self.predict_to(inputs, layer_name)
+        pca_space = self._state["pca"][layer_name]
+        hidden_pca = pca_space.transform(hidden_raw)
+
+        plt.scatter(hidden_pca[:,0], hidden_pca[:,1], c=colors)
+        plt.axis('off')
+        fp = io.BytesIO()
+        plt.savefig(fp, format="png")
+        plt.close()
+        image = Image.open(fp)
+        return image
+
+    def predict_pca(
+        self,
+        inputs=None,
+        targets=None,
+        show_error=False,
+        show_targets=False,
+        format=None,
+        rotate=False,
+        scale=None,
+        clear=True,
+        set_pca_spaces=True,
+        colors=None,
+        **config,
+    ):
+        """
+        """
+        # This are not sticky; need to set each time:
+        config["rotate"] = rotate
+        config["scale"] = scale
+        # Everything else is sticky:
+        self.config.update(config)
+
+        if set_pca_spaces:
+            self.set_pca_spaces(inputs)
+
+        try:
+            svg = self.to_svg(inputs=inputs, targets=targets, mode="pca", colors=colors)
+        except KeyboardInterrupt:
+            raise KeyboardInterrupt() from None
+
+        if format is None:
+            try:
+                get_ipython()  # noqa: F821
+                format = "html"
+            except Exception:
+                format = "image"
+
+        if format == "html":
+            if HTML is not None:
+                if clear:
+                    clear_output(wait=True)
+                display(HTML(svg))
+            else:
+                raise Exception(
+                    "need to install `IPython` or use Network.predict_pca(format='image')"
+                )
+        elif format == "svg":
+            return svg
+        elif format == "image":
+            return svg_to_image(svg, self.config)
+        else:
+            raise ValueError("unable to convert to format %r" % format)
+
+
     def predict_to(self, inputs, layer_name, format="numpy"):
         """
         Propagate input patterns to a bank in the network.
@@ -491,36 +592,6 @@ class Network:
             image = image.resize((width, height))
             return image
 
-    def display_picture(
-        self,
-        inputs=None,
-        targets=None,
-        show_error=False,
-        show_targets=False,
-        format=None,
-        clear=True,
-        **config,
-    ):
-        """
-        Inputs and targets are for a single pattern.
-        """
-        picture = self.take_picture(
-            inputs=inputs,
-            targets=targets,
-            show_error=show_error,
-            show_targets=show_targets,
-            format=format,
-            **config,
-        )
-        if HTML is not None:
-            if clear:
-                clear_output(wait=True)
-            display(picture)
-        else:
-            raise Exception(
-                "need to install `IPython` or use Network.display_picture()"
-            )
-
     def take_picture(
         self,
         inputs=None,
@@ -530,6 +601,7 @@ class Network:
         format=None,
         rotate=False,
         scale=None,
+        clear=True,
         **config,
     ):
         """
@@ -561,7 +633,7 @@ class Network:
         self.config.update(config)
 
         try:
-            svg = self.to_svg(inputs=inputs, targets=targets)
+            svg = self.to_svg(inputs=inputs, targets=targets, mode="activations", colors=None)
         except KeyboardInterrupt:
             raise KeyboardInterrupt() from None
 
@@ -574,7 +646,9 @@ class Network:
 
         if format == "html":
             if HTML is not None:
-                return HTML(svg)
+                if clear:
+                    clear_output(wait=True)
+                display(HTML(svg))
             else:
                 raise Exception(
                     "need to install `IPython` or use Network.take_picture(format='image')"
@@ -900,15 +974,17 @@ class Network:
             if layer_name in layer_names
         ]
 
-    def to_svg(self, inputs=None, targets=None):
+    def to_svg(self, inputs=None, targets=None, mode="activations", colors=None):
         """
         """
         # First, turn single patterns into a dataset:
-        inputs = np.array([inputs])
+        if mode == "activations":
+            inputs = np.array([inputs])
         if targets is not None:
-            targets = np.array([targets])
+            if mode == "activations":
+                targets = np.array([targets])
         # Next, build the structures:
-        struct = self.build_struct(inputs, targets)
+        struct = self.build_struct(inputs, targets, mode, colors)
         templates = get_templates(self.config)
         # get the header:
         svg = None
@@ -947,7 +1023,7 @@ class Network:
         svg += """</svg></g></svg>"""
         return svg
 
-    def build_struct(self, inputs, targets):
+    def build_struct(self, inputs, targets, mode, colors):
         ordering = list(
             reversed(self._level_ordering)
         )  # list of names per level, input to output
@@ -957,7 +1033,7 @@ class Network:
             row_heights,
             images,
             image_dims,
-        ) = self._pre_process_struct(inputs, ordering, targets)
+        ) = self._pre_process_struct(inputs, ordering, targets, mode, colors)
         # Now that we know the dimensions:
         struct = []
         cheight = self.config["border_top"]  # top border
@@ -1802,7 +1878,7 @@ class Network:
                 ordering[level_num] = best[1]
             return ordering
 
-    def _pre_process_struct(self, inputs, ordering, targets):
+    def _pre_process_struct(self, inputs, ordering, targets, mode, colors):
         """
         Determine sizes and pre-compute images.
         """
@@ -1868,7 +1944,9 @@ class Network:
                 #    else:
                 #        in_layer_name = self.input_bank_order[0]
                 #        v = self.make_dummy_vector(in_layer_name)
-                if True:  # FIXME
+                if mode == "pca":
+                    image = self.predict_pca_to(v, layer_name, colors)
+                else:
                     try:
                         # FIXME get one per output bank:
                         image = self.make_image(
@@ -1878,13 +1956,6 @@ class Network:
                         image = self.make_image(
                             layer_name, np.array(self.make_dummy_vector(layer_name)),
                         )
-                else:
-                    self.warn_once(
-                        "WARNING: network is uncompiled; activations cannot be visualized"
-                    )
-                    image = self.make_image(
-                        layer_name, np.array(self.make_dummy_vector(layer_name)),
-                    )
                 (width, height) = image.size
                 images[layer_name] = image  # little image
                 if self._get_layer_type(layer_name) == "output":
@@ -2052,6 +2123,12 @@ class Network:
         else:
             raise AttributeError("no such config layer: %r" % layer_name)
 
+    def get_weights_from_history(self):
+        """
+        Get the weights saved in history.
+        """
+        return self._history["weights"]
+
     def get_weights(self, flat=False):
         """
         Return the weights of the entire network.
@@ -2069,7 +2146,7 @@ class Network:
         else:
             return self._model.get_weights()
 
-    def set_weights(self, weights, flat=True):
+    def set_weights(self, weights, flat=False):
         """
         Set the weights in a network.
 
@@ -2158,6 +2235,7 @@ class Network:
         if not self._state["tolerance_accuracy_used"]:
             print("WARNING: you need Network.compile(metrics=['tolerance_accuracy']) to use tolerance")
         self._tolerance = tolerance
+
 
 class SimpleNetwork(Network):
     def __init__(

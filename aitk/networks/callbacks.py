@@ -22,6 +22,15 @@ def match_loss(name):
 def match_val(name):
     return name.startswith("val_")
 
+def make_early_stop(monitor, patience):
+    return EarlyStopping(monitor=monitor, patience=patience, verbose=True)
+
+def make_stop(metric, goal, patience, use_validation):
+    return StopWhen(metric, goal, patience, use_validation)
+
+def make_save(network, save_rate):
+    return SaveWeights(network, save_rate)
+
 class PlotCallback(Callback):
     def __init__(self, network, report_rate):
         super().__init__()
@@ -40,11 +49,22 @@ class PlotCallback(Callback):
         if self._figure is not None:
             plt.close()
 
-def make_early_stop(monitor, patience):
-    return EarlyStopping(monitor=monitor, patience=patience, verbose=True)
+class SaveWeights(Callback):
+    def __init__(self, network, save_rate):
+        super().__init__()
+        self.network = network
+        self.save_rate = save_rate
 
-def make_stop(metric, goal, patience, use_validation):
-    return StopWhen(metric, goal, patience, use_validation)
+    def on_train_begin(self, logs=None):
+        """
+        Save the initial weights
+        """
+        if len(self.network._history["weights"]) == 0:
+            self.network._history["weights"].append((0, self.network.get_weights()))
+
+    def on_epoch_end(self, epoch, logs=None):
+        if epoch % self.save_rate == 0:
+            self.network._history["weights"].append((epoch, self.network.get_weights()))
 
 class StopWhen(Callback):
     def __init__(self, metric="acc", goal=1.0, patience=0, use_validation=False, verbose=True):

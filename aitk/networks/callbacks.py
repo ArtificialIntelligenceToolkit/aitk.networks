@@ -31,7 +31,7 @@ def make_stop(metric, goal, patience, use_validation):
 def make_save(network, save_rate):
     return SaveWeights(network, save_rate)
 
-class PlotCallback(Callback):
+class UpdateCallback(Callback):
     def __init__(self, network, report_rate):
         super().__init__()
         self._network = network
@@ -42,10 +42,10 @@ class PlotCallback(Callback):
         print("Training %s..." % self._network.name)
 
     def on_epoch_end(self, epoch, logs=None):
-        self._network.plot_results(self, logs, self._report_rate)
+        self._network.on_epoch_end(self, logs, self._report_rate)
 
     def on_train_end(self, logs=None):
-        self._network.plot_results(self, logs)
+        self._network.on_epoch_end(self, logs)
         if self._figure is not None:
             plt.close()
 
@@ -63,8 +63,8 @@ class SaveWeights(Callback):
             self.network._history["weights"].append((0, self.network.get_weights()))
 
     def on_epoch_end(self, epoch, logs=None):
-        if epoch % self.save_rate == 0:
-            self.network._history["weights"].append((epoch, self.network.get_weights()))
+        if (epoch + 1) % self.save_rate == 0:
+            self.network._history["weights"].append((epoch + 1, self.network.get_weights()))
 
 class StopWhen(Callback):
     def __init__(self, metric="acc", goal=1.0, patience=0, use_validation=False, verbose=True):

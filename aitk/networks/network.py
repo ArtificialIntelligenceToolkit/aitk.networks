@@ -24,7 +24,7 @@ from PIL import Image, ImageDraw
 from tensorflow.keras.layers import Dense, Flatten, Input
 from tensorflow.keras.models import Model
 
-from .callbacks import PlotCallback, make_early_stop, make_stop, make_save
+from .callbacks import UpdateCallback, make_early_stop, make_stop, make_save
 from .utils import (
     get_argument_bindings,
     get_error_colormap,
@@ -220,14 +220,14 @@ class Network:
         # Keras Early stopping:
         monitor = kwargs.pop("monitor", None)
 
-        plot_callback = PlotCallback(self, report_rate)
+        update_callback = UpdateCallback(self, report_rate)
         kwargs = get_argument_bindings(self._model.fit, args, kwargs)
         # get callbacks, if any:
         callbacks = kwargs.get("callbacks", None)
         if callbacks is None:
             callbacks = []
-        # add our plot callback to it:
-        callbacks.append(plot_callback)
+        # add our update callback to it:
+        callbacks.append(update_callback)
         # add any other callbacks:
         if monitor is not None:
             callbacks.append(make_early_stop(monitor, patience))
@@ -255,11 +255,10 @@ class Network:
         metrics = {key: history.history[key][-1] for key in history.history}
 
         if save > 0:
-            # Save one last time: # FIXME: self._epoch is set in Plot callback
+            # FIXME: don't save if didn't learn
             self._history["weights"].append((self._epoch, self.get_weights()))
 
         ## FIXME: getting epochs by keyword:
-
         print("Epoch %d/%d %s" % (self._epoch, kwargs["epochs"], " - ".join(
             ["%s: %s" % (key, value) for (key, value) in metrics.items()])))
         return history
@@ -290,16 +289,22 @@ class Network:
             "NbAgg",
         ]
 
-    def plot_results(self, callback, logs, report_rate=None, clear=True):
+    def on_epoch_end(self, callback, logs, report_rate=None, clear=True):
         """
         plots loss and accuracy on separate graphs, ignoring any other
         metrics for now.
+
+        Args:
+            report_rate: if None, then just update the plot, else
+                advance self._epoch, and possible update plot
         """
         format = "svg"
 
-        if report_rate is not None: # just draw, not update
-            self._history["metrics"].append((self._epoch, logs))
+        if report_rate is not None:
+            # update epoch and history, and then possibly draw
+            # The metrics after the epoch of training, so advanced first
             self._epoch += 1
+            self._history["metrics"].append((self._epoch, logs))
 
             if (self._epoch % report_rate) != 0:
                 return
@@ -366,6 +371,7 @@ class Network:
 
 
         if True or format == "svg":
+            # FIXME: work in console
             # if (callback is not None and not callback.in_console) or format == "svg":
             bytes = io.BytesIO()
             plt.savefig(bytes, format="svg")
@@ -449,7 +455,11 @@ class Network:
         for layer in self.layers:
             pca = PCA(2)
             hidden_raw = self.predict_to(inputs, layer.name)
-            pca_space = pca.fit(hidden_raw)
+            try:
+                pca_space = pca.fit(hidden_raw)
+            except ValueError:
+                # Only one hidden layer unit
+                pca_space = None
             self._state["pca"][layer.name] = pca_space
 
     def get_input_length(self, inputs):
@@ -464,9 +474,16 @@ class Network:
 
         hidden_raw = self.predict_to(inputs, layer_name)
         pca_space = self._state["pca"][layer_name]
-        hidden_pca = pca_space.transform(hidden_raw)
+        if pca_space is not None:
+            hidden_pca = pca_space.transform(hidden_raw)
+            x = hidden_pca[:,0]
+            y = hidden_pca[:,1]
+        else:
+            # Only one hidden layer unit; we'll use zeros for Y axis
+            x = hidden_raw
+            y = np.zeros(len(hidden_raw))
 
-        plt.scatter(hidden_pca[:,0], hidden_pca[:,1], c=colors, s=sizes)
+        plt.scatter(x, y, c=colors, s=sizes)
         plt.axis('off')
         fp = io.BytesIO()
         plt.savefig(fp, format="png")
@@ -1947,8 +1964,10 @@ class Network:
                 #    else:
                 #        in_layer_name = self.input_bank_order[0]
                 #        v = self.make_dummy_vector(in_layer_name)
+                keep_aspect_ratio = None
                 if mode == "pca":
                     image = self.predict_pca_to(v, layer_name, colors, sizes)
+                    keep_aspect_ratio = True
                 else:
                     try:
                         # FIXME get one per output bank:
@@ -1996,7 +2015,9 @@ class Network:
                 # First, try based on shape:
                 # pwidth, pheight = np.array(image.size) * image_pixels_per_unit
                 vshape = self.vshape(layer_name)
-                if vshape is None or self._get_keep_aspect_ratio(layer_name):
+                keep_aspect_ratio = (keep_aspect_ratio if keep_aspect_ratio is not None
+                                     else self._get_keep_aspect_ratio(layer_name))
+                if vshape is None or keep_aspect_ratio:
                     pass  # let the image set the shape
                 elif len(vshape) == 1:
                     if vshape[0] is not None:
@@ -2016,7 +2037,7 @@ class Network:
                             width = vshape[1] * image_pixels_per_unit
                             height = image_pixels_per_unit
                 # keep aspect ratio:
-                if self._get_keep_aspect_ratio(layer_name):
+                if keep_aspect_ratio:
                     scale = image_maxdim / max(width, height)
                     image = image.resize((int(width * scale), int(height * scale)))
                     width, height = image.size

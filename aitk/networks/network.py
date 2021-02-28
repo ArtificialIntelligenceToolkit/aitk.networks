@@ -256,7 +256,7 @@ class Network:
 
         if save > 0:
             # Save one last time: # FIXME: self._epoch is set in Plot callback
-            self._history["weights"].append((self._epoch, self.network.get_weights()))
+            self._history["weights"].append((self._epoch, self.get_weights()))
 
         ## FIXME: getting epochs by keyword:
 
@@ -458,7 +458,7 @@ class Network:
         else:
             return len(inputs[0])
 
-    def predict_pca_to(self, inputs, layer_name, colors):
+    def predict_pca_to(self, inputs, layer_name, colors, sizes):
         if layer_name not in self._state["pca"]:
             raise Exception("Need to set_pca_spaces first")
 
@@ -466,7 +466,7 @@ class Network:
         pca_space = self._state["pca"][layer_name]
         hidden_pca = pca_space.transform(hidden_raw)
 
-        plt.scatter(hidden_pca[:,0], hidden_pca[:,1], c=colors)
+        plt.scatter(hidden_pca[:,0], hidden_pca[:,1], c=colors, s=sizes)
         plt.axis('off')
         fp = io.BytesIO()
         plt.savefig(fp, format="png")
@@ -486,6 +486,7 @@ class Network:
         clear=True,
         set_pca_spaces=True,
         colors=None,
+        sizes=None,
         **config,
     ):
         """
@@ -500,7 +501,8 @@ class Network:
             self.set_pca_spaces(inputs)
 
         try:
-            svg = self.to_svg(inputs=inputs, targets=targets, mode="pca", colors=colors)
+            svg = self.to_svg(inputs=inputs, targets=targets, mode="pca",
+                              colors=colors, sizes=sizes)
         except KeyboardInterrupt:
             raise KeyboardInterrupt() from None
 
@@ -633,7 +635,8 @@ class Network:
         self.config.update(config)
 
         try:
-            svg = self.to_svg(inputs=inputs, targets=targets, mode="activations", colors=None)
+            svg = self.to_svg(inputs=inputs, targets=targets, mode="activations",
+                              colors=None, sizes=None)
         except KeyboardInterrupt:
             raise KeyboardInterrupt() from None
 
@@ -974,7 +977,7 @@ class Network:
             if layer_name in layer_names
         ]
 
-    def to_svg(self, inputs=None, targets=None, mode="activations", colors=None):
+    def to_svg(self, inputs=None, targets=None, mode="activations", colors=None, sizes=None):
         """
         """
         # First, turn single patterns into a dataset:
@@ -984,7 +987,7 @@ class Network:
             if mode == "activations":
                 targets = np.array([targets])
         # Next, build the structures:
-        struct = self.build_struct(inputs, targets, mode, colors)
+        struct = self.build_struct(inputs, targets, mode, colors, sizes)
         templates = get_templates(self.config)
         # get the header:
         svg = None
@@ -1023,7 +1026,7 @@ class Network:
         svg += """</svg></g></svg>"""
         return svg
 
-    def build_struct(self, inputs, targets, mode, colors):
+    def build_struct(self, inputs, targets, mode, colors, sizes):
         ordering = list(
             reversed(self._level_ordering)
         )  # list of names per level, input to output
@@ -1033,7 +1036,7 @@ class Network:
             row_heights,
             images,
             image_dims,
-        ) = self._pre_process_struct(inputs, ordering, targets, mode, colors)
+        ) = self._pre_process_struct(inputs, ordering, targets, mode, colors, sizes)
         # Now that we know the dimensions:
         struct = []
         cheight = self.config["border_top"]  # top border
@@ -1878,7 +1881,7 @@ class Network:
                 ordering[level_num] = best[1]
             return ordering
 
-    def _pre_process_struct(self, inputs, ordering, targets, mode, colors):
+    def _pre_process_struct(self, inputs, ordering, targets, mode, colors, sizes):
         """
         Determine sizes and pre-compute images.
         """
@@ -1945,7 +1948,7 @@ class Network:
                 #        in_layer_name = self.input_bank_order[0]
                 #        v = self.make_dummy_vector(in_layer_name)
                 if mode == "pca":
-                    image = self.predict_pca_to(v, layer_name, colors)
+                    image = self.predict_pca_to(v, layer_name, colors, sizes)
                 else:
                     try:
                         # FIXME get one per output bank:

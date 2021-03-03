@@ -393,10 +393,10 @@ class Network:
         # inputs is either a dict or a list, where index matches
         # the input banks.
         if isinstance(inputs, dict):
-            return [inputs[name] for name in input_names]
+            return [np.array(inputs[name]) for name in input_names]
         else:
             return [
-                inputs[index]
+                np.array(inputs[index])
                 for index in [self.input_bank_order.index(name) for name in input_names]
             ]
 
@@ -418,14 +418,9 @@ class Network:
 
         * format: (str) "numpy", "list", or "image"
         """
-        if len(self.input_bank_order) > 1:
-            input_names = self._input_layer_names[layer_name]
-            input_vectors = self._extract_inputs(inputs, input_names)
-        else:
-            input_names = self.input_bank_order
-            input_vectors = inputs
+        input_vectors = self._extract_inputs(inputs, self.input_bank_order)
         try:
-            outputs = self._model.predict(np.array(input_vectors))
+            outputs = self._model.predict(input_vectors)
         except Exception as exc:
             input_layers_shapes = [
                 self._get_raw_output_shape(layer_name) for layer_name in input_names
@@ -553,16 +548,11 @@ class Network:
 
         * format: (str) "numpy", "list", or "image"
         """
-        if len(self.input_bank_order) > 1:
-            input_names = self._input_layer_names[layer_name]
-            model = self._predict_models[input_names, layer_name]
-            input_vectors = self._extract_inputs(inputs, input_names)
-        else:
-            input_names = self.input_bank_order
-            model = self._predict_models[input_names, layer_name]
-            input_vectors = inputs
+        input_names = self._input_layer_names[layer_name]
+        model = self._predict_models[input_names, layer_name]
+        input_vectors = self._extract_inputs(inputs, input_names)
         try:
-            outputs = model.predict(np.array(input_vectors))
+            outputs = model.predict(input_vectors)
         except Exception as exc:
             input_layers_shapes = [
                 self._get_raw_output_shape(layer_name) for layer_name in input_names

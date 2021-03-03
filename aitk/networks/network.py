@@ -394,6 +394,8 @@ class Network:
         # the input banks.
         if isinstance(inputs, dict):
             return [np.array(inputs[name]) for name in input_names]
+        elif len(self.input_bank_order) == 1:
+            return inputs
         else:
             return [
                 np.array(inputs[index])
@@ -423,12 +425,12 @@ class Network:
             outputs = self._model.predict(input_vectors)
         except Exception as exc:
             input_layers_shapes = [
-                self._get_raw_output_shape(layer_name) for layer_name in input_names
+                self._get_raw_output_shape(layer_name) for layer_name in self.input_bank_order
             ]
             hints = ", ".join(
                 [
                     ("%s: %s" % (name, shape))
-                    for name, shape in zip(input_names, input_layers_shapes)
+                    for name, shape in zip(self.input_bank_order, input_layers_shapes)
                 ]
             )
             raise Exception(
@@ -988,11 +990,18 @@ class Network:
         """
         """
         # First, turn single patterns into a dataset:
-        if mode == "activations":
-            inputs = np.array([inputs])
+        if inputs is not None:
+            if mode == "activations":
+                if len(self.input_bank_order) == 1:
+                    inputs = [[inputs]]
+                else:
+                    inputs = [inputs]
         if targets is not None:
             if mode == "activations":
-                targets = np.array([targets])
+                if len(self.input_bank_order) == 1:
+                    targets = [[targets]]
+                else:
+                    targets = [targets]
         # Next, build the structures:
         struct = self.build_struct(inputs, targets, mode, colors, sizes)
         templates = get_templates(self.config)

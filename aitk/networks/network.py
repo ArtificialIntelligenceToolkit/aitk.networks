@@ -250,13 +250,13 @@ class Network:
             plt.close()
             raise KeyboardInterrupt() from None
 
-        ## FIXME: make sure there is at least one:
-
-        metrics = {key: history.history[key][-1] for key in history.history}
-
         if save > 0:
-            # FIXME: don't save if didn't learn
+            # FIXME: don't save if didn't go through loop?
             self._history["weights"].append((self._epoch, self.get_weights()))
+
+
+        metrics = {key: history.history[key][-1] for key in history.history
+                   if len(history.history[key]) > 0}
 
         ## FIXME: getting epochs by keyword:
         print("Epoch %d/%d %s" % (self._epoch, kwargs["epochs"], " - ".join(
@@ -993,15 +993,16 @@ class Network:
         if inputs is not None:
             if mode == "activations":
                 if len(self.input_bank_order) == 1:
-                    inputs = [[inputs]]
+                    inputs = [np.array([inputs])]
                 else:
-                    inputs = [inputs]
+                    inputs = [np.array([bank]) for bank in inputs]
         if targets is not None:
             if mode == "activations":
-                if len(self.input_bank_order) == 1:
-                    targets = [[targets]]
+                # FIXME: handle labels
+                if len(self.output_bank_order) == 1:
+                    targets = [np.array([targets])]
                 else:
-                    targets = [targets]
+                    targets = [np.array([bank]) for bank in targets]
         # Next, build the structures:
         struct = self.build_struct(inputs, targets, mode, colors, sizes)
         templates = get_templates(self.config)
@@ -1577,40 +1578,6 @@ class Network:
             level_num += 1
         cheight += self.config["border_bottom"]
         # DONE!
-        # Draw live/static sign
-        if False:  # FIXME
-            # dynamic image:
-            label = "*"
-            if self.config["rotate"]:
-                struct.append(
-                    [
-                        "label_svg",
-                        {
-                            "x": 10,
-                            "y": cheight - 10,
-                            "label": label,
-                            "font_size": self.config["font_size"] * 2.0,
-                            "font_color": self.config["font_color_dynamic"],
-                            "font_family": self.config["font_family"],
-                            "text_anchor": "middle",
-                        },
-                    ]
-                )
-            else:
-                struct.append(
-                    [
-                        "label_svg",
-                        {
-                            "x": 10,
-                            "y": 10,
-                            "label": label,
-                            "font_size": self.config["font_size"] * 2.0,
-                            "font_color": self.config["font_color_dynamic"],
-                            "font_family": self.config["font_family"],
-                            "text_anchor": "middle",
-                        },
-                    ]
-                )
         # Draw the title:
         if self.config["rotate"]:
             struct.append(

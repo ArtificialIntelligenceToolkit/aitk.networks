@@ -13,6 +13,7 @@ import html
 import io
 import itertools
 import math
+import numbers
 import operator
 
 import matplotlib.pyplot as plt
@@ -577,10 +578,20 @@ class Network:
         elif format == "list":
             return outputs.tolist()
 
-    def predict_from(self, inputs, to_layers):
+    def predict_from(self, inputs, from_layer, to_layer):
         """
         Propagate patterns from one bank to another bank in the network.
         """
+        key = (tuple([from_layer]), to_layer)
+        if key not in self._predict_models:
+            # FIXME: we have to build this part of the graph
+            # or use weights.
+            pass
+            #self._predict_models[key] = Model(
+            #)
+        model = self._predict_models[key]
+        return model.predict(inputs)
+
 
     def display_colormap(self, colormap=None):
         """
@@ -603,7 +614,7 @@ class Network:
             image = image.resize((width, height))
             return image
 
-    def take_picture(
+    def display(
         self,
         inputs=None,
         targets=None,
@@ -630,11 +641,11 @@ class Network:
         Examples:
             >>> net = Network("Picture", 2, 2, 1)
             >>> net.compile(error="mse", optimizer="adam")
-            >>> net.take_picture()
+            >>> net.display()
             <IPython.core.display.HTML object>
-            >>> net.take_picture([.5, .5])
+            >>> net.display([.5, .5])
             <IPython.core.display.HTML object>
-            >>> net.take_picture([.5, .5])
+            >>> net.display([.5, .5])
             <IPython.core.display.HTML object>
         """
         # This are not sticky; need to set each time:
@@ -663,7 +674,7 @@ class Network:
                 display(HTML(svg))
             else:
                 raise Exception(
-                    "need to install `IPython` or use Network.take_picture(format='image')"
+                    "need to install `IPython` or use Network.display(format='image')"
                 )
         elif format == "svg":
             return svg
@@ -1586,7 +1597,7 @@ class Network:
                     {
                         "x": 10,  # really border_left
                         "y": cheight / 2,
-                        "label": self.config["name"],
+                        "label": ("PCAs for " if mode == "pca" else "") + self.config["name"],
                         "font_size": self.config["font_size"] + 3,
                         "font_color": self.config["font_color"],
                         "font_family": self.config["font_family"],
@@ -1601,7 +1612,7 @@ class Network:
                     {
                         "x": max_width / 2,
                         "y": self.config["border_top"] / 2,
-                        "label": self.config["name"],
+                        "label": ("PCAs for " if mode == "pca" else "") + self.config["name"],
                         "font_size": self.config["font_size"] + 3,
                         "font_color": self.config["font_color"],
                         "font_family": self.config["font_family"],
@@ -2136,17 +2147,15 @@ class Network:
         else:
             return self._model.get_weights()
 
-    def set_weights(self, weights, flat=False):
+    def set_weights(self, weights):
         """
         Set the weights in a network.
 
         Args:
-            weights: a list of weights, or a single
-                array
-            flat: (bool) if True, the weights are a flat
-                array
+            weights: a list of pairs of weights and biases for each layer,
+                or a single (flat) array of values
         """
-        if flat:
+        if len(weights) > 0 and isinstance(weights[0], numbers.Number):
             current = 0
             for layer in self._model.layers:
                 orig = layer.get_weights()

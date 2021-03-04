@@ -27,6 +27,7 @@ from tensorflow.keras.models import Model
 
 from .callbacks import UpdateCallback, make_early_stop, make_stop, make_save
 from .utils import (
+    find_path,
     get_argument_bindings,
     get_error_colormap,
     get_templates,
@@ -578,17 +579,22 @@ class Network:
         elif format == "list":
             return outputs.tolist()
 
-    def predict_from(self, inputs, from_layer, to_layer):
+    def predict_from(self, inputs, from_layer_name, to_layer_name):
         """
         Propagate patterns from one bank to another bank in the network.
         """
-        key = (tuple([from_layer]), to_layer)
+        key = (tuple([from_layer_name]), to_layer_name)
         if key not in self._predict_models:
-            # FIXME: we have to build this part of the graph
-            # or use weights.
-            pass
-            #self._predict_models[key] = Model(
-            #)
+            from_layer = self[from_layer_name]
+            path = find_path(from_layer, to_layer_name)
+            if self._get_layer_type(from_layer_name) == "input":
+                current = input_layer = from_layer
+            else:
+                # FIXME: concat.input_shape [(None, 2), (None, 2)]
+                current = input_layer = Input(from_layer.input_shape[1:])
+            for layer_name in path:
+                current = self[layer_name](current)
+            self._predict_models[key] = Model(inputs=input_layer, outputs=current)
         model = self._predict_models[key]
         return model.predict(inputs)
 

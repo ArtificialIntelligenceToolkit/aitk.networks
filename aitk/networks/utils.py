@@ -89,6 +89,29 @@ def maximum(seq):
         return np.array(seq).max()
 
 
+def find_path(from_layer, to_layer_name):
+    """
+    Breadth-first search to find shortest path
+    from from_layer to to_layer_name.
+
+    Returns None if there is no path.
+    """
+    # No need to put from_layer.name in path:
+    from_layer.path = []
+    queue = [from_layer]
+    while len(queue) > 0:
+        current = queue.pop()
+        if current.name == to_layer_name:
+            return current.path
+        else:
+            # expand:
+            for node in current.outbound_nodes:
+                layer = node.outbound_layer
+                layer.path = current.path + [layer.name]
+                queue.append(layer)
+    return None
+
+
 def gather_nodes(layers):
     nodes = []
     for layer in layers:

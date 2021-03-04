@@ -89,6 +89,16 @@ def maximum(seq):
         return np.array(seq).max()
 
 
+def make_input_from_shape(shape):
+    from tensorflow.keras.layers import Input
+
+    if isinstance(shape, list):
+        input_shape = [bank[1:] for bank in shape]
+    else:
+        input_shape = shape[1:]
+    return Input(input_shape, name="input")
+
+
 def find_path(from_layer, to_layer_name):
     """
     Breadth-first search to find shortest path

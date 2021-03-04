@@ -32,6 +32,7 @@ from .utils import (
     get_error_colormap,
     get_templates,
     image_to_uri,
+    make_input_from_shape,
     render_curve,
     scale_output_for_image,
     svg_to_image,
@@ -587,11 +588,8 @@ class Network:
         if key not in self._predict_models:
             from_layer = self[from_layer_name]
             path = find_path(from_layer, to_layer_name)
-            if self._get_layer_type(from_layer_name) == "input":
-                current = input_layer = from_layer
-            else:
-                # FIXME: concat.input_shape [(None, 2), (None, 2)]
-                current = input_layer = Input(from_layer.input_shape[1:])
+            # Input should be what next layer expects:
+            current = input_layer = make_input_from_shape(self[path[0]].input_shape)
             for layer_name in path:
                 current = self[layer_name](current)
             self._predict_models[key] = Model(inputs=input_layer, outputs=current)

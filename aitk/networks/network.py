@@ -468,6 +468,17 @@ class Network:
         else:
             return len(inputs[0])
 
+    def predict_histogram_to(self, inputs, layer_name):
+        hidden_raw = self.predict_to(inputs, layer_name)
+
+        plt.hist(hidden_raw)
+        plt.axis('off')
+        fp = io.BytesIO()
+        plt.savefig(fp, format="png")
+        plt.close()
+        image = Image.open(fp)
+        return image
+
     def predict_pca_to(self, inputs, layer_name, colors, sizes):
         if layer_name not in self._state["pca"]:
             raise Exception("Need to set_pca_spaces first")
@@ -520,6 +531,55 @@ class Network:
         try:
             svg = self.to_svg(inputs=inputs, targets=targets, mode="pca",
                               colors=colors, sizes=sizes)
+        except KeyboardInterrupt:
+            raise KeyboardInterrupt() from None
+
+        if format is None:
+            try:
+                get_ipython()  # noqa: F821
+                format = "html"
+            except Exception:
+                format = "image"
+
+        if format == "html":
+            if HTML is not None:
+                if clear:
+                    clear_output(wait=True)
+                display(HTML(svg))
+            else:
+                raise Exception(
+                    "need to install `IPython` or use Network.predict_pca(format='image')"
+                )
+        elif format == "svg":
+            return svg
+        elif format == "image":
+            return svg_to_image(svg, self.config)
+        else:
+            raise ValueError("unable to convert to format %r" % format)
+
+
+    def predict_histogram(
+        self,
+        inputs=None,
+        targets=None,
+        show_error=False,
+        show_targets=False,
+        format=None,
+        rotate=False,
+        scale=None,
+        clear=True,
+        **config,
+    ):
+        """
+        """
+        # This are not sticky; need to set each time:
+        config["rotate"] = rotate
+        config["scale"] = scale
+        # Everything else is sticky:
+        self.config.update(config)
+
+        try:
+            svg = self.to_svg(inputs=inputs, targets=targets, mode="histogram")
         except KeyboardInterrupt:
             raise KeyboardInterrupt() from None
 
@@ -659,7 +719,7 @@ class Network:
         self.config.update(config)
 
         try:
-            svg = self.to_svg(inputs=inputs, targets=targets, mode="activations",
+            svg = self.to_svg(inputs=inputs, targets=targets, mode="activation",
                               colors=None, sizes=None)
         except KeyboardInterrupt:
             raise KeyboardInterrupt() from None
@@ -1001,18 +1061,18 @@ class Network:
             if layer_name in layer_names
         ]
 
-    def to_svg(self, inputs=None, targets=None, mode="activations", colors=None, sizes=None):
+    def to_svg(self, inputs=None, targets=None, mode="activation", colors=None, sizes=None):
         """
         """
         # First, turn single patterns into a dataset:
         if inputs is not None:
-            if mode == "activations":
+            if mode == "activation":
                 if len(self.input_bank_order) == 1:
                     inputs = [np.array([inputs])]
                 else:
                     inputs = [np.array([bank]) for bank in inputs]
         if targets is not None:
-            if mode == "activations":
+            if mode == "activation":
                 # FIXME: handle labels
                 if len(self.output_bank_order) == 1:
                     targets = [np.array([targets])]
@@ -1594,6 +1654,12 @@ class Network:
         cheight += self.config["border_bottom"]
         # DONE!
         # Draw the title:
+        if mode == "activation":
+            title = "Activations for %s"  % self.config["name"]
+        elif mode == "pca":
+            title = "PCAs for %s" % self.config["name"]
+        elif mode == "histogram":
+            title = "Histograms for %s" % self.config["name"]
         if self.config["rotate"]:
             struct.append(
                 [
@@ -1601,7 +1667,7 @@ class Network:
                     {
                         "x": 10,  # really border_left
                         "y": cheight / 2,
-                        "label": ("PCAs for " if mode == "pca" else "") + self.config["name"],
+                        "label": title,
                         "font_size": self.config["font_size"] + 3,
                         "font_color": self.config["font_color"],
                         "font_family": self.config["font_family"],
@@ -1616,7 +1682,7 @@ class Network:
                     {
                         "x": max_width / 2,
                         "y": self.config["border_top"] / 2,
-                        "label": ("PCAs for " if mode == "pca" else "") + self.config["name"],
+                        "label": title,
                         "font_size": self.config["font_size"] + 3,
                         "font_color": self.config["font_color"],
                         "font_family": self.config["font_family"],
@@ -1949,7 +2015,10 @@ class Network:
                 if mode == "pca":
                     image = self.predict_pca_to(v, layer_name, colors, sizes)
                     keep_aspect_ratio = True
-                else:
+                elif mode == "histogram":
+                    image = self.predict_histogram_to(v, layer_name)
+                    keep_aspect_ratio = True
+                else: # activations
                     try:
                         # FIXME get one per output bank:
                         image = self.make_image(

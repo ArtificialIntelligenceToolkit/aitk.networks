@@ -37,6 +37,17 @@ class Line:
         self.angle = math.atan2(lengthY, lengthX)
 
 
+def get_layer_name(layer):
+    from tensorflow.python.framework.ops import Tensor
+    from tensorflow.keras.models import Model
+
+    if isinstance(layer, Tensor):
+        m = Model(inputs=layer, outputs=layer)
+        return m.layers[0].name
+    else:
+        return layer.name
+
+
 def get_error_colormap():
     return "FIXME"
 
@@ -134,6 +145,10 @@ def gather_nodes(layers):
                 nodes.append(node)
     return nodes
 
+#def topological_sort_connections(input_layers, connections):
+#    layer_list = input_layers[:]
+#    while not done:
+#        for connection in connections:
 
 def topological_sort(layers):
     """

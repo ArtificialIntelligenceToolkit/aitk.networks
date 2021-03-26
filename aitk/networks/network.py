@@ -15,21 +15,18 @@ import itertools
 import math
 import numbers
 import operator
+import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
-import tensorflow as tf
-import tensorflow.keras.backend as K
 from matplotlib import cm
 from PIL import Image, ImageDraw
-from tensorflow.keras.layers import Dense, Flatten, Input
-from tensorflow.keras.models import Model
 
-from .callbacks import UpdateCallback, make_early_stop, make_stop, make_save
 from .utils import (
     find_path,
     get_argument_bindings,
     get_error_colormap,
+    get_layer_name,
     get_templates,
     image_to_uri,
     make_input_from_shape,
@@ -49,33 +46,30 @@ class Network:
     """
     Wrapper around a keras.Model.
     """
-
-    def __init__(self, model, **config):
+    def __init__(self, model=None, layers=None, **config):
+        self._widget = None
         self._init_state()
         self._model = model
+        # {name: (layer, [incoming], [outgoing])...}
+        if layers is not None:
+            self._pre_layers = {get_layer_name(layer): layer
+                                for layer in layers}
+            self.show_connection_help()
+        else:
+            self._pre_layers = {}
+        self._connections = []
         # Place to put models between layers:
         self._predict_models = {}
         # Place to map layer to its input layers:
         self._input_layer_names = {}
-        # Get all of the layers, even implicit ones, in order:
-        self._layers = topological_sort(self._model.layers)
-        # Make a mapping of names to layers:
-        self._layers_map = {layer.name: layer for layer in self._layers}
-        # Get the input bank names, in order:
-        self.input_bank_order = self._get_input_layers()
-        # Get the output bank names, in order:
-        self.output_bank_order = self._get_output_layers()
-        # Get the best (shortest path) between layers:
-        self._level_ordering = self._get_level_ordering()
-        # Build intermediary models:
-        self._build_predict_models()
         # For saving HTML for watchers
         self._svg = None
         self._history = {"weights": [], "metrics": []}
         self._epoch = 0
         self._tolerance = 0.1
+        name = self._model.name if self._model is not None else ""
         self.config = {
-            "name": self._model.name,  # for svg title
+            "name": name,  # for svg title
             "class_id": "keras-network",  # for svg network classid
             "id": "keras-network",  # for svg id
             "font_size": 12,  # for svg
@@ -114,10 +108,16 @@ class Network:
             # layer_name: {vshape, feature, keep_aspect_ratio, visible
             # colormap, border_color, border_width}
         }
-        # Setup layer config dicts:
-        self.config["layers"] = {layer.name: {} for layer in self._layers}
-        # Set the colormap, etc for each layer:
-        self.initialize()
+        # Get all of the layers, even implicit ones, in order:
+        if self._model is not None:
+            self.initialize_model()
+        else:
+            self._layers = []
+            self._layers_map = {}
+            self.input_bank_order = []
+            self.output_bank_order = []
+            self._level_ordering = []
+
         # Override settings:
         self.set_config(**config)
 
@@ -133,6 +133,27 @@ class Network:
                 "tolerance_accuracy_used": False,
                 "pca": {},
             }
+
+    def show_connection_help(self):
+        print("Connect layers with Network.connect(NAME, NAME) where NAMEs are in:")
+        print(list(self._pre_layers.keys()))
+
+    def initialize_model(self):
+        self._layers = topological_sort(self._model.layers)
+        # Make a mapping of names to layers:
+        self._layers_map = {layer.name: layer for layer in self._layers}
+        # Get the input bank names, in order:
+        self.input_bank_order = self._get_input_layers()
+        # Get the output bank names, in order:
+        self.output_bank_order = self._get_output_layers()
+        # Get the best (shortest path) between layers:
+        self._level_ordering = self._get_level_ordering()
+        # Build intermediary models:
+        self._build_predict_models()
+        # Setup layer config dicts:
+        self.config["layers"] = {layer.name: {} for layer in self._layers}
+        # Set the colormap, etc for each layer:
+        self.initialize()
 
     def initialize(self, inputs=None, reset=True):
         """
@@ -193,6 +214,43 @@ class Network:
                             max_new + 1,
                         )
 
+    def connect(self, from_layer_name=None, to_layer_name=None):
+        """
+        """
+        if len(self._pre_layers) == 0:
+            raise Exception("no layers have been added")
+        if from_layer_name is not None and not isinstance(from_layer_name, str):
+            raise Exception("from_layer_name should be a string or None")
+        if to_layer_name is not None and not isinstance(to_layer_name, str):
+            raise Exception("to_layer_name should be a string or None")
+        if from_layer_name is None and to_layer_name is None:
+            #if (any([layer.outgoing_connections for name, layer in self.layers]) or
+            #    any([layer.incoming_connections for layer in self.layers])):
+            #    raise Exception("layers already have connections")
+            for i in range(len(self._pre_layers) - 1):
+                names = list(self._pre_layers)
+                from_layer = self._pre_layers[names[i]]
+                to_layer = self._pre_layers[names[i + 1]]
+                self.connect(from_layer.name, to_layer.name)
+        else:
+            if from_layer_name == to_layer_name:
+                raise Exception("self connections are not allowed")
+            if not isinstance(from_layer_name, str):
+                raise Exception("from_layer_name should be a string")
+            if from_layer_name not in self._pre_layers:
+                raise Exception('unknown layer: %s' % from_layer_name)
+            if not isinstance(to_layer_name, str):
+                raise Exception("to_layer_name should be a string")
+            if to_layer_name not in self._pre_layers:
+                raise Exception('unknown layer: %s' % to_layer_name)
+            from_layer = self._pre_layers[from_layer_name]
+            to_layer = self._pre_layers[to_layer_name]
+            # Check for input going to a Dense to warn:
+            if len(from_layer.shape) > 2 and to_layer.__class__.__name__ == "Dense":
+                print("WARNING: connected multi-dimensional input layer '%s' to layer '%s'; consider adding a FlattenLayer between them" % (
+                    from_layer.name, to_layer.name), file=sys.stderr)
+            self._connections.append((from_layer_name, to_layer_name))
+
     def fit(self, *args, **kwargs):
         """
         Train the model.
@@ -201,6 +259,8 @@ class Network:
             * monitor: (str) metric to monitor to determine whether to stop
             * patience: (int) number of epochs to wait without improvements until stopping
         """
+        from .callbacks import UpdateCallback, make_early_stop, make_stop, make_save
+
         # plot = True
         # if plot:
         #    import matplotlib
@@ -405,10 +465,56 @@ class Network:
                 for index in [self.input_bank_order.index(name) for name in input_names]
             ]
 
+    def build_model(self):
+        from tensorflow.keras.models import Model
+
+        # Assumes layers either added or passed in via layers
+        # and connected via Network.connect()
+        froms = [connect[0] for connect in self._connections]
+        tos = [connect[1] for connect in self._connections]
+        input_layers = []
+        output_layers = []
+        for layer_name in self._pre_layers:
+            if layer_name not in tos:
+                input_layers.append(layer_name)
+            if layer_name not in froms:
+                output_layers.append(layer_name)
+        outputs = [self.get_tensor_to(output_layer, input_layers)
+                   for output_layer in output_layers]
+        inputs = [self._pre_layers[layer_name]
+                  for layer_name in input_layers]
+        self._model = Model(inputs=inputs, outputs=outputs)
+        self.initialize_model()
+
+    def get_layers_to(self, layer_name):
+        return [connection[0] for connection in self._connections
+                if connection[1] == layer_name]
+
+    def get_tensor_to(self, layer_name, input_layers):
+        # recursive
+        layers = self.get_layers_to(layer_name)
+        if len(layers) > 1:
+            # Concatenate them into incoming_layer
+            # recurse each?
+            pass
+        else:
+            incoming_layer_name = layers[0]
+
+        layer = self._pre_layers[layer_name]
+        if incoming_layer_name in input_layers:
+            incoming_layer = self._pre_layers[incoming_layer_name]
+            return layer(incoming_layer)
+        else:
+            # FIXME: doesn't work for concat:
+            return layer(self.get_tensor_to(incoming_layer_name, input_layers))
+
     def compile(self, *args, **kwargs):
         """
         """
-        # First, handle any special names:
+        # First, build model if necessary:
+        if self._model is None:
+            self.build_model()
+        # Next, handle any special names:
         metrics = kwargs.pop("metrics", [])
         if len(metrics) > 0:
             metrics = [self.get_metric(metric) for metric in metrics]
@@ -644,6 +750,8 @@ class Network:
         """
         Propagate patterns from one bank to another bank in the network.
         """
+        from tensorflow.keras.models import Model
+
         key = (tuple([from_layer_name]), to_layer_name)
         if key not in self._predict_models:
             from_layer = self[from_layer_name]
@@ -678,16 +786,15 @@ class Network:
             image = image.resize((width, height))
             return image
 
-    def display(
+    def get_image(
         self,
         inputs=None,
         targets=None,
         show_error=False,
         show_targets=False,
-        format=None,
+        format="image",
         rotate=False,
         scale=None,
-        clear=True,
         **config,
     ):
         """
@@ -724,6 +831,25 @@ class Network:
         except KeyboardInterrupt:
             raise KeyboardInterrupt() from None
 
+        if format == "svg":
+            return svg
+        elif format == "image":
+            return svg_to_image(svg, self.config)
+        else:
+            raise ValueError("unable to convert to format %r" % format)
+
+    def display(
+        self,
+        inputs=None,
+        targets=None,
+        show_error=False,
+        show_targets=False,
+        format=None,
+        rotate=False,
+        scale=None,
+        clear=True,
+        **config,
+    ):
         if format is None:
             try:
                 get_ipython()  # noqa: F821
@@ -732,6 +858,8 @@ class Network:
                 format = "image"
 
         if format == "html":
+            svg = self.get_image(inputs, targets, show_error, show_targets, "svg",
+                                 rotate, scale, **config)
             if HTML is not None:
                 if clear:
                     clear_output(wait=True)
@@ -740,14 +868,29 @@ class Network:
                 raise Exception(
                     "need to install `IPython` or use Network.display(format='image')"
                 )
-        elif format == "svg":
-            return svg
-        elif format == "image":
-            return svg_to_image(svg, self.config)
         else:
-            raise ValueError("unable to convert to format %r" % format)
+            image = self.get_image(inputs, targets, show_error, show_targets, format,
+                                   rotate, scale, **config)
+            return image
+
+    def watch(self):
+        """
+        """
+        display(self.get_widget())
+
+    def get_widget(self):
+        """
+        """
+        from ipywidgets import HTML
+
+        if self._widget is None:
+            self._widget = HTML(value=self.get_image(format="svg"))
+
+        return self._widget
 
     def _build_predict_models(self):
+        from tensorflow.keras.models import Model
+
         # for all layers, inputs to here:
         for layer in self._layers:
             if self._get_layer_type(layer.name) != "input":
@@ -801,6 +944,8 @@ class Network:
         Given an activation name (or function), and an output vector, display
         make and return an image widget.
         """
+        import tensorflow.keras.backend as K
+
         vshape = self.vshape(layer_name)
         if vshape and vshape != self._get_output_shape(layer_name):
             vector = vector.reshape(vshape)
@@ -2261,6 +2406,8 @@ class Network:
             print("WARNING: you need to use an optimizer with lr")
 
     def get_metric(self, name):
+        import tensorflow.keras.backend as K
+
         if name == "tolerance_accuracy":
             self._state["tolerance_accuracy_used"] = True
             def tolerance_accuracy(targets, outputs):
@@ -2319,6 +2466,9 @@ class SimpleNetwork(Network):
         optimizer="sgd",
         metrics=None,
     ):
+        from tensorflow.keras.models import Model
+        from tensorflow.keras.layers import Dense, Flatten, Input
+
         def make_name(index, total):
             if index == 0:
                 return "input"
@@ -2361,6 +2511,8 @@ class SimpleNetwork(Network):
         super().__init__(model)
 
     def _make_optimizer(self, optimizer):
+        import tensorflow as tf
+
         # Get optimizer with some defaults
         if optimizer == "sgd":
             return tf.keras.optimizers.SGD(

@@ -15,6 +15,7 @@ import itertools
 import math
 import numbers
 import operator
+import re
 import sys
 
 import matplotlib.pyplot as plt
@@ -54,9 +55,11 @@ class Network:
         if layers is not None:
             self._pre_layers = {get_layer_name(layer): layer
                                 for layer in layers}
+            self._name = config.get("name", "Network")
             self._show_connection_help()
         else:
             self._pre_layers = {}
+            self._name = None
         self._connections = []
         # Place to put models between layers:
         self._predict_models = {}
@@ -67,7 +70,7 @@ class Network:
         self._history = {"weights": [], "metrics": []}
         self._epoch = 0
         self._tolerance = 0.1
-        name = self._model.name if self._model is not None else ""
+        name = self._model.name if self._model is not None else "Network"
         self.config = {
             "name": name,  # for svg title
             "class_id": "keras-network",  # for svg network classid
@@ -483,7 +486,7 @@ class Network:
                    for output_layer in output_layers]
         inputs = [self._pre_layers[layer_name]
                   for layer_name in input_layers]
-        self._model = Model(inputs=inputs, outputs=outputs)
+        self._model = Model(inputs=inputs, outputs=outputs, name=self._name)
         self.initialize_model()
 
     def _get_layers_to(self, layer_name):
@@ -886,7 +889,14 @@ class Network:
         from ipywidgets import HTML
 
         if self._widget is None:
-            self._widget = HTML(value=self.get_image(format="svg"))
+            # Watched items get a border
+            svg = self.get_image(format="svg")
+            # Need width and height; we get it out of svg:
+            header = svg.split("\n")[0]
+            width = int(re.match('.*width="(\d*)px"', header).groups()[0])
+            height = int(re.match('.*height="(\d*)px"', header).groups()[0])
+            div = """<div style="outline: 5px solid #1976D2FF; width: %spx; height: %spx;">%s</div>""" % (width, height, svg)
+            self._widget = HTML(value=div)
 
         return self._widget
 
@@ -1234,6 +1244,7 @@ class Network:
             if template_name == "head_svg":
                 dict["background_color"] = self.config["background_color"]
                 svg = templates["head_svg"].format(**dict)
+                break
         # build the rest:
         for index in range(len(struct)):
             (template_name, dict) = struct[index]

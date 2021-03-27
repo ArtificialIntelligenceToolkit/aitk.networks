@@ -49,6 +49,10 @@ class Network:
     """
     def __init__(self, model=None, layers=None, **config):
         self._widget = None
+        self._widget_kwargs = {
+            "format": "svg",
+        }
+        self._watchers = []
         self._init_state()
         self._model = model
         # {name: (layer, [incoming], [outgoing])...}
@@ -878,25 +882,67 @@ class Network:
                                    rotate, scale, **config)
             return image
 
-    def watch(self):
+    def watch_weights(self, from_name, to_name):
         """
         """
-        display(self.get_widget())
+        # search to see if already watched:
+        # if not, add
+        # set args?
+        # return
 
-    def get_widget(self):
+    def watch(self,
+        show_error=None,
+        show_targets=None,
+        rotate=None,
+        scale=None,
+    ):
+        """
+        """
+        widget = self.get_widget(
+            show_error=show_error,
+            show_targets=show_targets,
+            rotate=rotate,
+            scale=scale,
+        )
+        if widget not in self._watchers:
+            self._watchers.append(widget)
+
+        display(widget)
+
+    def get_widget(self,
+        show_error=None,
+        show_targets=None,
+        rotate=None,
+        scale=None,
+    ):
         """
         """
         from ipywidgets import HTML
 
+        # Update the defaults:
+        if show_error is not None:
+            self._widget_kwargs["show_error"] = show_error
+        if show_targets is not None:
+            self._widget_kwargs["show_targets"] = show_targets
+        if rotate is not None:
+            self._widget_kwargs["rotate"] = rotate
+        if scale is not None:
+            self._widget_kwargs["scale"] = scale
+
+        svg = self.get_image(**self._widget_kwargs)
+
+        # Watched items get a border
+        # Need width and height; we get it out of svg:
+        header = svg.split("\n")[0]
+        width = int(re.match('.*width="(\d*)px"', header).groups()[0])
+        height = int(re.match('.*height="(\d*)px"', header).groups()[0])
+        div = """<div style="outline: 5px solid #1976D2FF; width: %spx; height: %spx;">%s</div>""" % (width, height, svg)
+
         if self._widget is None:
-            # Watched items get a border
-            svg = self.get_image(format="svg")
-            # Need width and height; we get it out of svg:
-            header = svg.split("\n")[0]
-            width = int(re.match('.*width="(\d*)px"', header).groups()[0])
-            height = int(re.match('.*height="(\d*)px"', header).groups()[0])
-            div = """<div style="outline: 5px solid #1976D2FF; width: %spx; height: %spx;">%s</div>""" % (width, height, svg)
+            # Singleton:
             self._widget = HTML(value=div)
+        else:
+            self._widget.value = div
 
         return self._widget
 

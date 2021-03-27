@@ -54,7 +54,7 @@ class Network:
         if layers is not None:
             self._pre_layers = {get_layer_name(layer): layer
                                 for layer in layers}
-            self.show_connection_help()
+            self._show_connection_help()
         else:
             self._pre_layers = {}
         self._connections = []
@@ -134,9 +134,9 @@ class Network:
                 "pca": {},
             }
 
-    def show_connection_help(self):
+    def _show_connection_help(self):
         print("Connect layers with Network.connect(NAME, NAME) where NAMEs are in:")
-        print(list(self._pre_layers.keys()))
+        print("    ", list(self._pre_layers.keys()))
 
     def initialize_model(self):
         self._layers = topological_sort(self._model.layers)
@@ -246,9 +246,9 @@ class Network:
             from_layer = self._pre_layers[from_layer_name]
             to_layer = self._pre_layers[to_layer_name]
             # Check for input going to a Dense to warn:
-            if len(from_layer.shape) > 2 and to_layer.__class__.__name__ == "Dense":
-                print("WARNING: connected multi-dimensional input layer '%s' to layer '%s'; consider adding a FlattenLayer between them" % (
-                    from_layer.name, to_layer.name), file=sys.stderr)
+            #if len(from_layer.shape) > 2 and to_layer.__class__.__name__ == "Dense":
+            #    print("WARNING: connected multi-dimensional input layer '%s' to layer '%s'; consider adding a FlattenLayer between them" % (
+            #        from_layer.name, to_layer.name), file=sys.stderr)
             self._connections.append((from_layer_name, to_layer_name))
 
     def fit(self, *args, **kwargs):
@@ -479,34 +479,36 @@ class Network:
                 input_layers.append(layer_name)
             if layer_name not in froms:
                 output_layers.append(layer_name)
-        outputs = [self.get_tensor_to(output_layer, input_layers)
+        outputs = [self._get_tensor_to(output_layer)
                    for output_layer in output_layers]
         inputs = [self._pre_layers[layer_name]
                   for layer_name in input_layers]
         self._model = Model(inputs=inputs, outputs=outputs)
         self.initialize_model()
 
-    def get_layers_to(self, layer_name):
+    def _get_layers_to(self, layer_name):
         return [connection[0] for connection in self._connections
                 if connection[1] == layer_name]
 
-    def get_tensor_to(self, layer_name, input_layers):
+    def _get_tensor_to(self, layer_name):
+        from tensorflow.keras.layers import Concatenate
+
         # recursive
-        layers = self.get_layers_to(layer_name)
-        if len(layers) > 1:
-            # Concatenate them into incoming_layer
-            # recurse each?
-            pass
-        else:
-            incoming_layer_name = layers[0]
+        layers = self._get_layers_to(layer_name)
+        if len(layers) == 0:
+            # An input layer:
+            return self._pre_layers[layer_name]
+
+        incoming_layers = [self._get_tensor_to(incoming_layer_name)
+                           for incoming_layer_name in layers]
+
+        if len(incoming_layers) == 1:
+            incoming_layer = incoming_layers[0]
+        else: # more than one
+            incoming_layer = Concatenate()(incoming_layers)
 
         layer = self._pre_layers[layer_name]
-        if incoming_layer_name in input_layers:
-            incoming_layer = self._pre_layers[incoming_layer_name]
-            return layer(incoming_layer)
-        else:
-            # FIXME: doesn't work for concat:
-            return layer(self.get_tensor_to(incoming_layer_name, input_layers))
+        return layer(incoming_layer)
 
     def compile(self, *args, **kwargs):
         """

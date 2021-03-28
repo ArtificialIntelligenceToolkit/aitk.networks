@@ -15,7 +15,6 @@ import itertools
 import math
 import numbers
 import operator
-import re
 import sys
 
 import matplotlib.pyplot as plt
@@ -41,77 +40,6 @@ try:
     from IPython.display import HTML, clear_output, display
 except ImportError:
     HTML = None
-
-class NetworkWatcher():
-    def __init__(self,
-                 network,
-                 show_error=None,
-                 show_targets=None,
-                 rotate=None,
-                 scale=None,
-    ):
-        self.network = network
-        self._widget_kwargs = {}
-        self._widget = None
-        # Update the defaults:
-        if show_error is not None:
-            self._widget_kwargs["show_error"] = show_error
-        if show_targets is not None:
-            self._widget_kwargs["show_targets"] = show_targets
-        if rotate is not None:
-            self._widget_kwargs["rotate"] = rotate
-        if scale is not None:
-            self._widget_kwargs["scale"] = scale
-        self.get_widget(**self._widget_kwargs)
-
-    def update(self, inputs=None, targets=None):
-        svg = self.network.get_image(inputs, targets, format="svg", **self._widget_kwargs)
-
-        # Watched items get a border
-        # Need width and height; we get it out of svg:
-        header = svg.split("\n")[0]
-        width = int(re.match('.*width="(\d*)px"', header).groups()[0])
-        height = int(re.match('.*height="(\d*)px"', header).groups()[0])
-        div = """<div style="outline: 5px solid #1976D2FF; width: %spx; height: %spx;">%s</div>""" % (width, height, svg)
-        self._widget.value = div
-
-    def get_widget(self,
-        show_error=None,
-        show_targets=None,
-        rotate=None,
-        scale=None,
-    ):
-        """
-        """
-        from ipywidgets import HTML
-
-        # Update the defaults:
-        if show_error is not None:
-            self._widget_kwargs["show_error"] = show_error
-        if show_targets is not None:
-            self._widget_kwargs["show_targets"] = show_targets
-        if rotate is not None:
-            self._widget_kwargs["rotate"] = rotate
-        if scale is not None:
-            self._widget_kwargs["scale"] = scale
-
-        svg = self.network.get_image(format="svg", **self._widget_kwargs)
-
-        # Watched items get a border
-        # Need width and height; we get it out of svg:
-        header = svg.split("\n")[0]
-        width = int(re.match('.*width="(\d*)px"', header).groups()[0])
-        height = int(re.match('.*height="(\d*)px"', header).groups()[0])
-        div = """<div style="outline: 5px solid #1976D2FF; width: %spx; height: %spx;">%s</div>""" % (width, height, svg)
-
-        if self._widget is None:
-            # Singleton:
-            self._widget = HTML(value=div)
-        else:
-            self._widget.value = div
-
-        return self._widget
-
 
 class Network:
     """
@@ -952,10 +880,34 @@ class Network:
     def watch_weights(self, from_name, to_name):
         """
         """
+        from .watchers import WeightWatcher
+
         # search to see if already watched:
         # if not, add
         # set args?
         # return
+
+        # FIXME: only add if not there
+        watcher = WeightWatcher(self, layer_name)
+        self._watchers.append(watcher)
+
+        display(watcher._widget)
+
+    def watch_layer(self, layer_name):
+        """
+        """
+        from .watchers import LayerWatcher
+
+        # search to see if already watched:
+        # if not, add
+        # set args?
+        # return
+
+        # FIXME: only add if not there
+        watcher = LayerWatcher(self, layer_name)
+        self._watchers.append(watcher)
+
+        display(watcher._widget)
 
     def watch(self,
         show_error=None,
@@ -965,6 +917,8 @@ class Network:
     ):
         """
         """
+        from .watchers import NetworkWatcher
+
         if self._watcher is None:
             self._watcher = NetworkWatcher(self, show_error, show_targets, rotate, scale)
             self._watchers.append(self._watcher)
@@ -975,7 +929,11 @@ class Network:
                inputs=None,
                targets=None,
     ):
-        self._watcher.update(inputs, targets)
+        """
+        Update all of the watchers
+        """
+        for watcher in self._watchers:
+            watcher.update(inputs, targets)
 
     def _build_predict_models(self):
         from tensorflow.keras.models import Model

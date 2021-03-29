@@ -46,7 +46,6 @@ class Network:
     Wrapper around a keras.Model.
     """
     def __init__(self, model=None, layers=None, **config):
-        self._watcher = None
         self._watchers = []
         self._init_state()
         self._model = model
@@ -882,14 +881,13 @@ class Network:
         """
         from .watchers import WeightWatcher
 
-        # search to see if already watched:
-        # if not, add
-        # set args?
-        # return
-
-        # FIXME: only add if not there
-        watcher = WeightWatcher(self, layer_name)
-        self._watchers.append(watcher)
+        name = "WeightWatcher: from %s to %s" % (from_name, to_name)
+        names = [watcher.name for watcher in self._watchers]
+        if name not in names:
+            watcher = WeightWatcher(self, layer_name)
+            self._watchers.append(watcher)
+        else:
+            watcher = self._watchers[names.index(name)]
 
         display(watcher._widget)
 
@@ -898,14 +896,13 @@ class Network:
         """
         from .watchers import LayerWatcher
 
-        # search to see if already watched:
-        # if not, add
-        # set args?
-        # return
-
-        # FIXME: only add if not there
-        watcher = LayerWatcher(self, layer_name)
-        self._watchers.append(watcher)
+        name = "LayerWatcher: %s" % (layer_name,)
+        names = [watcher.name for watcher in self._watchers]
+        if name not in names:
+            watcher = LayerWatcher(self, layer_name)
+            self._watchers.append(watcher)
+        else:
+            watcher = self._watchers[names.index(name)]
 
         display(watcher._widget)
 
@@ -919,18 +916,22 @@ class Network:
         """
         from .watchers import NetworkWatcher
 
-        if self._watcher is None:
-            self._watcher = NetworkWatcher(self, show_error, show_targets, rotate, scale)
-            self._watchers.append(self._watcher)
+        name = "NetworkWatcher"
+        names = [watcher.name for watcher in self._watchers]
+        if name not in names:
+            watcher = NetworkWatcher(self, show_error, show_targets, rotate, scale)
+            self._watchers.append(watcher)
+        else:
+            watcher = self._watchers[names.index(name)]
 
-        display(self._watcher._widget)
+        display(watcher._widget)
 
     def update(self,
                inputs=None,
                targets=None,
     ):
         """
-        Update all of the watchers
+        Update all of the watchers whatever they may be watching.
         """
         for watcher in self._watchers:
             watcher.update(inputs, targets)
@@ -1252,6 +1253,27 @@ class Network:
             for layer_name in self.input_bank_order
             if layer_name in layer_names
         ]
+
+    def enumerate_dataset(self, dataset1, dataset2=None):
+        """"
+        Takes a dataset and turns it into individual
+        sets of one pattern each.
+        """
+        # FIXME: do targets too? Or zip?
+        count = 0
+        while True:
+            if len(self.input_bank_order) == 1:
+                if count < len(dataset1):
+                    data1 = dataset1[count]
+                else:
+                    break
+            else:
+                if count < len(dataset1[0]):
+                    data1 = [bank[count] for bank in dataset1]
+                else:
+                    break
+            yield data1
+            count += 1
 
     def to_svg(self, inputs=None, targets=None, mode="activation", colors=None, sizes=None):
         """

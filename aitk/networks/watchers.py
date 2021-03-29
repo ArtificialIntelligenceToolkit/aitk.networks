@@ -15,14 +15,42 @@ from .utils import (
     image_to_uri,
 )
 
+class WeightWatcher():
+    def __init__(self, network, from_name, to_name):
+        self.network = network
+        self.from_name = from_name
+        self.to_name = to_name
+        self.name = "WeightWatcher: from %s to %s" % (from_name, to_name)
+
+    def update(self, **kwargs):
+        weights = self.network._model.get_weights()
+        image_uri = image_to_uri(image)
+        width, height = image.size
+        div = """<div style="outline: 5px solid #1976D2FF; width: %spx; height: %spx;"><image src="%s"></image></div>""" % (width, height, image_uri)
+        self._widget.value = div
+
+    def get_widget(self):
+        from ipywidgets import HTML
+
+        if self._widget is None:
+            self._widget = HTML()
+
+        self.update()
+
+        return self._widget
+
 class LayerWatcher():
     def __init__(self, network, layer_name):
+        self.name = "LayerWatcher: %s" % (layer_name)
         self.network = network
         self.layer_name = layer_name
         self._widget = None
         self.get_widget()
 
-    def update(self, inputs, targets):
+    def update(self, inputs=None, targets=None):
+        if inputs is None and targets is None:
+            return
+
         if len(self.network.input_bank_order) == 1:
             inputs = [np.array([inputs])]
         else:
@@ -60,6 +88,7 @@ class NetworkWatcher():
                  rotate=None,
                  scale=None,
     ):
+        self.name = "NetworkWatcher"
         self.network = network
         self._widget_kwargs = {}
         self._widget = None
@@ -75,6 +104,9 @@ class NetworkWatcher():
         self.get_widget(**self._widget_kwargs)
 
     def update(self, inputs=None, targets=None):
+        if inputs is None and targets is None:
+            return
+
         svg = self.network.get_image(inputs, targets, format="svg", **self._widget_kwargs)
 
         # Watched items get a border

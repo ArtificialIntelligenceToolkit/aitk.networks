@@ -939,12 +939,33 @@ class Network:
     def update(self,
                inputs=None,
                targets=None,
+               dataset=False,
     ):
         """
         Update all of the watchers whatever they may be watching.
         """
-        for watcher in self._watchers:
-            watcher.update(inputs, targets)
+        if dataset:
+            if inputs is not None and targets is not None:
+                count = 0
+                for ins, targs in self.enumerate_dataset(inputs, targets):
+                    for watcher in self._watchers:
+                        watcher.update(ins, targs)
+                        if HTML is not None:
+                            clear_output()
+                        input("Pattern %s; press enter to continue: " % count)
+                        count += 1
+            elif inputs is not None:
+                count = 0
+                for ins in self.enumerate_dataset(inputs):
+                    for watcher in self._watchers:
+                        watcher.update(ins)
+                        if HTML is not None:
+                            clear_output()
+                        input("Pattern %s; press enter to continue: " % count)
+                        count += 1
+        else:
+            for watcher in self._watchers:
+                watcher.update(inputs, targets)
 
     def _build_predict_models(self):
         from tensorflow.keras.models import Model

@@ -47,6 +47,8 @@ class Network:
     """
     def __init__(self, model=None, layers=None, **config):
         self._watchers = []
+        self._fit_inputs = None
+        self._fit_targets = None
         self._init_state()
         self._model = model
         # {name: (layer, [incoming], [outgoing])...}
@@ -307,6 +309,10 @@ class Network:
             callbacks.append(make_stop("loss", val_loss, patience, True))
         kwargs["callbacks"] = callbacks
         kwargs["verbose"] = 0
+
+        self._fit_inputs = kwargs.get("x", None) # inputs
+        self._fit_targets = kwargs.get("y", None) # targets
+
         # call underlying model fit:
         try:
             history = self._model.fit(**kwargs)
@@ -372,6 +378,9 @@ class Network:
 
             if (self._epoch % report_rate) != 0:
                 return
+
+        inputs, targets = next(self.enumerate_dataset(self._fit_inputs, self._fit_targets))
+        self.update(inputs, targets) # update watchers
 
         metrics = [list(history[1].keys()) for history in self._history["metrics"]]
         metrics = set([item for sublist in metrics for item in sublist])
@@ -921,10 +930,11 @@ class Network:
         if name not in names:
             watcher = NetworkWatcher(self, show_error, show_targets, rotate, scale)
             self._watchers.append(watcher)
+            widget = watcher._widget
         else:
             watcher = self._watchers[names.index(name)]
-
-        display(watcher._widget)
+            widget = watcher.get_widget(show_error, show_targets, rotate, scale)
+        display(widget)
 
     def update(self,
                inputs=None,
@@ -1259,7 +1269,6 @@ class Network:
         Takes a dataset and turns it into individual
         sets of one pattern each.
         """
-        # FIXME: do targets too? Or zip?
         count = 0
         while True:
             if len(self.input_bank_order) == 1:
@@ -1272,7 +1281,23 @@ class Network:
                     data1 = [bank[count] for bank in dataset1]
                 else:
                     break
-            yield data1
+
+            if dataset2 is not None:
+                if len(self.output_bank_order) == 1:
+                    if count < len(dataset2):
+                        data2 = dataset2[count]
+                    else:
+                        break
+                else:
+                    if count < len(dataset2[0]):
+                        data2 = [bank[count] for bank in dataset2]
+                    else:
+                        break
+
+                yield data1, data2
+            else:
+                yield data1
+
             count += 1
 
     def to_svg(self, inputs=None, targets=None, mode="activation", colors=None, sizes=None):

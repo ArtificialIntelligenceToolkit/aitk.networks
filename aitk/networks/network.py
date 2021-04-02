@@ -15,6 +15,7 @@ import itertools
 import math
 import numbers
 import operator
+import random
 import sys
 
 import matplotlib.pyplot as plt
@@ -379,8 +380,11 @@ class Network:
             if (self._epoch % report_rate) != 0:
                 return
 
-        inputs, targets = next(self.enumerate_dataset(self._fit_inputs, self._fit_targets))
-        self.update(inputs, targets) # update watchers
+        index = random.randint(0, self.get_input_length(self._fit_inputs) - 1)
+        inputs = self.get_input_from_dataset(index, self._fit_inputs)
+        targets = self.get_target_from_dataset(index, self._fit_targets)
+
+        self.propagate(inputs, targets) # update watchers
 
         metrics = [list(history[1].keys()) for history in self._history["metrics"]]
         metrics = set([item for sublist in metrics for item in sublist])
@@ -941,10 +945,12 @@ class Network:
                targets=None,
     ):
         """
-        Update all of the watchers whatever they may be watching.
+        Update all of the watchers whatever they may be watching,
+        and return the propagation of the inputs through the network.
         """
         for watcher in self._watchers:
             watcher.update(inputs, targets)
+        return self._model.predict(self.input_to_dataset(inputs))
 
     def propagate_each(self,
                inputs=None,
@@ -1290,6 +1296,26 @@ class Network:
             if layer_name in layer_names
         ]
 
+    def get_input_from_dataset(self, index, dataset):
+        """
+        Get input tensor(s) at index from dataset.
+        """
+        if len(self.input_bank_order) == 1:
+            data = dataset[index]
+        else:
+            data = [bank[index] for bank in dataset]
+        return data
+
+    def get_target_from_dataset(self, index, dataset):
+        """
+        Get target tensor(s) at index from dataset.
+        """
+        if len(self.output_bank_order) == 1:
+            data = dataset[index]
+        else:
+            data = [bank[index] for bank in dataset]
+        return data
+
     def enumerate_dataset(self, dataset1, dataset2=None):
         """"
         Takes a dataset and turns it into individual
@@ -1326,23 +1352,35 @@ class Network:
 
             count += 1
 
+    def input_to_dataset(self, input):
+        """
+        Take input tensor(s) and turn into an appropriate
+        dataset.
+        """
+        if len(self.input_bank_order) == 1:
+            inputs = [np.array([input])]
+        else:
+            inputs = [np.array([bank]) for bank in input]
+        return inputs
+
+    def target_to_dataset(self, target):
+        # FIXME: handle labels
+        if len(self.output_bank_order) == 1:
+            targets = [np.array([target])]
+        else:
+            targets = [np.array([bank]) for bank in target]
+        return targets
+
     def to_svg(self, inputs=None, targets=None, mode="activation", colors=None, sizes=None):
         """
         """
         # First, turn single patterns into a dataset:
         if inputs is not None:
             if mode == "activation":
-                if len(self.input_bank_order) == 1:
-                    inputs = [np.array([inputs])]
-                else:
-                    inputs = [np.array([bank]) for bank in inputs]
+                inputs = self.input_to_dataset(inputs)
         if targets is not None:
             if mode == "activation":
-                # FIXME: handle labels
-                if len(self.output_bank_order) == 1:
-                    targets = [np.array([targets])]
-                else:
-                    targets = [np.array([bank]) for bank in targets]
+                targets = self.target_to_dataset(targets)
         # Next, build the structures:
         struct = self.build_struct(inputs, targets, mode, colors, sizes)
         templates = get_templates(self.config)

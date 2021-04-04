@@ -889,15 +889,15 @@ class Network:
                                    rotate, scale, **config)
             return image
 
-    def watch_weights(self, from_name, to_name):
+    def watch_weights(self, to_name):
         """
         """
         from .watchers import WeightWatcher
 
-        name = "WeightWatcher: from %s to %s" % (from_name, to_name)
+        name = "WeightWatcher: to %s" % (to_name,)
         names = [watcher.name for watcher in self._watchers]
         if name not in names:
-            watcher = WeightWatcher(self, layer_name)
+            watcher = WeightWatcher(self, to_name)
             self._watchers.append(watcher)
         else:
             watcher = self._watchers[names.index(name)]

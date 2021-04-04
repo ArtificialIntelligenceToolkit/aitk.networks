@@ -8,6 +8,7 @@
 #
 # ******************************************************
 
+from matplotlib import cm
 import numpy as np
 import re
 
@@ -16,14 +17,63 @@ from .utils import (
 )
 
 class WeightWatcher():
-    def __init__(self, network, from_name, to_name):
+    def __init__(self, network, to_name):
         self.network = network
-        self.from_name = from_name
         self.to_name = to_name
-        self.name = "WeightWatcher: from %s to %s" % (from_name, to_name)
+        self.to_layer = self.network[self.to_name]
+        self.from_layer = self.to_layer.inbound_nodes[0].inbound_layers
+        self.name = "WeightWatcher: to %s" % (self.to_name,)
+        self._widget = None
+        self._widget = self.get_widget()
 
-    def update(self, **kwargs):
-        weights = self.network._model.get_weights()
+    def array_to_image(self, vector):
+        from PIL import Image, ImageDraw
+
+        size = 1 # self.config.get("pixels_per_unit", 1)
+        new_width = vector.shape[0] * size  # in, pixels
+        new_height = vector.shape[1] * size  # in, pixels
+
+        #try:
+        #    cm_hot = cm.get_cmap(color)
+        #except Exception:
+        cm_hot = cm.get_cmap("gray")
+
+        vector = cm_hot(vector)
+        vector = np.uint8(vector * 255)
+        if max(vector.shape) <= 20: # self.config["max_draw_units"]:
+            # Need to make it bigger, to draw circles:
+            # Make this value too small, and borders are blocky;
+            # too big and borders are too thin
+            scale = int(250 / max(vector.shape))
+            size = size * scale
+            image = Image.new(
+                "RGBA", (new_height * scale, new_width * scale), color="white"
+            )
+            draw = ImageDraw.Draw(image)
+            for row in range(vector.shape[1]):
+                for col in range(vector.shape[0]):
+                    # upper-left, lower-right:
+                    draw.rectangle(
+                        (
+                            row * size,
+                            col * size,
+                            (row + 1) * size - 1,
+                            (col + 1) * size - 1,
+                        ),
+                        fill=tuple(vector[col][row]),
+                        outline="black",
+                    )
+        else:
+            image = Image.fromarray(array)
+            image = image.resize((new_height, new_width))
+
+        return image
+
+    def update(self, *args, **kwargs):
+        weights = self.to_layer.get_weights() # matrix, bias
+        # if len() == 2, weights and then biases
+        # weights.shape = (incoming units, outgoing units)
+        image = self.array_to_image(weights[0]) # weights
         image_uri = image_to_uri(image)
         width, height = image.size
         div = """<div style="outline: 5px solid #1976D2FF; width: %spx; height: %spx;"><image src="%s"></image></div>""" % (width, height, image_uri)

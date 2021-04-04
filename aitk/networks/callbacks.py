@@ -95,6 +95,7 @@ class StopWhen(Callback):
 
     def on_epoch_end(self, epoch, logs=None):
         if logs is not None:
+            metric_value = None
             for key in logs:
                 if self.use_validation:
                     if self.metric == "accuracy" and match_acc(key) and match_val(key):

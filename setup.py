@@ -48,7 +48,7 @@ setup_args = dict(
     long_description=long_description,
     long_description_content_type="text/markdown",
     packages=setuptools.find_namespace_packages(include=['aitk.*']),
-    install_requires=["setuptools", "Pillow", "numpy", "tensorflow", "matplotlib", "aitk.utils"],
+    install_requires=["setuptools", "Pillow", "numpy", "tensorflow", "matplotlib", "aitk.utils=>0.2.2"],
     extras_require={"jupyter": ["ipywidgets", "IPython"], "image": ["cairosvg"]},
     python_requires=">=3.6",
     license="BSD-3-Clause",

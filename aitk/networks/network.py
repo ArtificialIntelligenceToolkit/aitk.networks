@@ -47,6 +47,7 @@ class Network:
     Wrapper around a keras.Model.
     """
     def __init__(self, model=None, layers=None, **config):
+        self._initialized = False
         self._watchers = []
         self._fit_inputs = None
         self._fit_targets = None
@@ -186,6 +187,7 @@ class Network:
                     minmax = self._get_act_minmax(layer.name)
                     self.config["layers"][layer.name]["colormap"] = ("gray", minmax[0], minmax[1])
         else:
+            self._initialized = True
             # If reset is true, we set to extremes so any value will adjust
             # Only do this on input layers:
             if reset:
@@ -851,6 +853,9 @@ class Network:
         config["scale"] = scale
         # Everything else is sticky:
         self.config.update(config)
+
+        if not self._initialized and inputs is not None:
+            self.initialize(inputs)
 
         try:
             svg = self.to_svg(inputs=inputs, targets=targets, mode="activation",

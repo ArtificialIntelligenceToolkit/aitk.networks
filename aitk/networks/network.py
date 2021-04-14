@@ -260,8 +260,16 @@ class Network:
         Train the model.
 
         kwargs:
-            * monitor: (str) metric to monitor to determine whether to stop
+            * accuracy: (float) stop when accuracy gets equal or above this value
+            * val_accuracy: (float) stop when validation accuracy gets equal or above this value
+            * tolerance: (float) use this value for measuring accuracies
+            * report_rate: (int) update the graphs every N epochs
+            * loss: (float) stop when loss gets equal or below this value
+            * val_loss: (float) stop when validation loss gets equal or below this value
             * patience: (int) number of epochs to wait without improvements until stopping
+            * save: (bool) whether to save the weights at end of each epoch
+            * monitor: (str) metric to monitor to determine whether to stop
+            * callbacks: (list) list of callbacks
         """
         from .callbacks import UpdateCallback, make_early_stop, make_stop, make_save
 
@@ -278,6 +286,9 @@ class Network:
         patience = kwargs.pop("patience", 0)
         # Our stopping criteria:
         accuracy = kwargs.pop("accuracy", None)
+        tolerance = kwargs.pop("tolerance", None)
+        if tolerance is not None:
+            self.set_tolerance(tolerance)
         val_accuracy = kwargs.pop("val_accuracy", None)
         loss = kwargs.pop("loss", None)
         val_loss = kwargs.pop("val_loss", None)
@@ -2643,7 +2654,7 @@ class SimpleNetwork(Network):
             if index == 0:
                 size = layer_sizes[index]
                 return Input(size, name=name)
-            elif layer_sizes[index] == 0:
+            elif layer_sizes[index] in ["flatten", "Flatten"]:
                 return Flatten(name=name)
             else:
                 size = layer_sizes[index]

@@ -957,15 +957,17 @@ class Network:
         display(widget)
 
     def propagate(self,
-               inputs=None,
-               targets=None,
+                  inputs=None,
+                  targets=None,
+                  show=True,
     ):
         """
         Update all of the watchers whatever they may be watching,
         and return the propagation of the inputs through the network.
         """
-        for watcher in self._watchers:
-            watcher.update(inputs, targets)
+        if show:
+            for watcher in self._watchers:
+                watcher.update(inputs, targets)
         return self._model.predict(self.input_to_dataset(inputs))
 
     def propagate_each(self,

@@ -2674,6 +2674,8 @@ class SimpleNetwork(Network):
                     activation_function = activation
                 elif len(size) == 2 and isinstance(size[1], str):
                     size, activation_function = size
+                else:
+                    raise Exception("Invalid SimpleNetwork layer representation: %r" % size)
                 return Dense(size, activation=activation_function, name=name)
 
         layers = [

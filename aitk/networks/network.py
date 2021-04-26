@@ -165,6 +165,10 @@ class Network:
         Set colormap for each layer based on inputs or
         activation functions per layer.
 
+        Args:
+            inputs: inputs in single pattern format (not a dataset)
+            reset: if True, reset the colormap ranges
+
         If inputs is None, just make best guess for all layers.
 
         If inputs is not None, use these for input layer
@@ -202,9 +206,10 @@ class Network:
                         )
             # Now we set the minmax for input layer, based on past values
             # or extremes:
+            input_dataset = self.input_to_dataset(inputs)
             for layer in self._layers:
                 if self._get_layer_type(layer.name) == "input":
-                    outputs = self.predict_to(inputs, layer.name)
+                    outputs = self.predict_to(input_dataset, layer.name)
                     color_orig, min_orig, max_orig = self.config["layers"][layer.name]["colormap"]
                     min_new, max_new = (
                         min(outputs.min(), min_orig),
@@ -800,7 +805,7 @@ class Network:
         """
         if colormap is None:
             if HTML:
-                for colorname in cm._gen_cmap_registry():
+                for colorname in cm.cmap_d.keys():
                     display(colorname, self.display_colormap(colorname))
             else:
                 raise Exception("you need to install IPython for this function to work")

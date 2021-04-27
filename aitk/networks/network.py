@@ -192,6 +192,8 @@ class Network:
                     self.config["layers"][layer.name]["colormap"] = ("gray", minmax[0], minmax[1])
         else:
             self._initialized = True
+            input_dataset = self.input_to_dataset(inputs)
+            input_array = np.array(inputs)
             # If reset is true, we set to extremes so any value will adjust
             # Only do this on input layers:
             if reset:
@@ -199,14 +201,20 @@ class Network:
                     if self._get_layer_type(layer.name) == "input":
                         if layer.name not in self.config["layers"]:
                             self.config["layers"][layer.name] = {}
-                        self.config["layers"][layer.name]["colormap"] = (
-                            "gray",
-                            float("+inf"), # extreme too big
-                            float("-inf"), # extreme too small
-                        )
+                        if input_array.shape == 3 and input_array.shape[2] == 3:
+                            self.config["layers"][layer.name]["colormap"] = (
+                                "gray",
+                                float("+inf"), # extreme too big
+                                float("-inf"), # extreme too small
+                            )
+                        else:
+                            self.config["layers"][layer.name]["colormap"] = (
+                                "color",
+                                float("+inf"), # extreme too big
+                                float("-inf"), # extreme too small
+                            )
             # Now we set the minmax for input layer, based on past values
             # or extremes:
-            input_dataset = self.input_to_dataset(inputs)
             for layer in self._layers:
                 if self._get_layer_type(layer.name) == "input":
                     outputs = self.predict_to(input_dataset, layer.name)
@@ -1099,12 +1107,16 @@ class Network:
         size = self.config.get("pixels_per_unit", 1)
         new_width = vector.shape[0] * size  # in, pixels
         new_height = vector.shape[1] * size  # in, pixels
-        try:
-            cm_hot = cm.get_cmap(color)
-        except Exception:
-            cm_hot = cm.get_cmap("gray")
-        vector = cm_hot(vector)
-        vector = np.uint8(vector * 255)
+        if color == "color":
+            # don't colormap it
+            pass
+        else:
+            try:
+                cm_hot = cm.get_cmap(color)
+            except Exception:
+                cm_hot = cm.get_cmap("gray")
+            vector = cm_hot(vector)
+            vector = np.uint8(vector * 255)
         if max(vector.shape) <= self.config["max_draw_units"]:
             # Need to make it bigger, to draw circles:
             # Make this value too small, and borders are blocky;
@@ -1184,7 +1196,7 @@ class Network:
         ):
             return self.config["layers"][layer_name]["feature"]
         else:
-            return 0
+            return slice(None, None)
 
     def _get_keep_aspect_ratio(self, layer_name):
         if (

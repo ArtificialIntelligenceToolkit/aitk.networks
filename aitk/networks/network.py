@@ -2661,7 +2661,7 @@ class SimpleNetwork(Network):
         metrics=None,
     ):
         from tensorflow.keras.models import Model
-        from tensorflow.keras.layers import Dense, Flatten, Input
+        from tensorflow.keras.layers import Dense, Flatten, Input, Layer
 
         def make_name(index, total):
             if index == 0:
@@ -2674,21 +2674,24 @@ class SimpleNetwork(Network):
                 return "hidden_%d" % index
 
         def make_layer(index, layer_sizes, activation):
-            name = make_name(index, len(layer_sizes))
-            if index == 0:
-                size = layer_sizes[index]
-                return Input(size, name=name)
-            elif layer_sizes[index] in ["flatten", "Flatten"]:
-                return Flatten(name=name)
+            if isinstance(layer_sizes[index], Layer):
+                return layer_sizes[index]
             else:
-                size = layer_sizes[index]
-                if isinstance(size, int):
-                    activation_function = activation
-                elif len(size) == 2 and isinstance(size[1], str):
-                    size, activation_function = size
+                name = make_name(index, len(layer_sizes))
+                if index == 0:
+                    size = layer_sizes[index]
+                    return Input(size, name=name)
+                elif layer_sizes[index] in ["flatten", "Flatten"]:
+                    return Flatten(name=name)
                 else:
-                    raise Exception("Invalid SimpleNetwork layer representation: %r" % size)
-                return Dense(size, activation=activation_function, name=name)
+                    size = layer_sizes[index]
+                    if isinstance(size, int):
+                        activation_function = activation
+                    elif len(size) == 2 and isinstance(size[1], str):
+                        size, activation_function = size
+                    else:
+                        raise Exception("Invalid SimpleNetwork layer representation: %r" % size)
+                    return Dense(size, activation=activation_function, name=name)
 
         layers = [
             make_layer(index, layer_sizes, activation)

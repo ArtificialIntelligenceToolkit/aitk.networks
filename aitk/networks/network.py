@@ -2634,7 +2634,6 @@ class Network:
         else:
             print("WARNING: you need to use an optimizer with momentum")
 
-
     def get_tolerance(self):
         """
         """
@@ -2653,13 +2652,35 @@ class Network:
 class SimpleNetwork(Network):
     def __init__(
         self,
-        *layer_sizes,
+        *layers,
         name="SimpleNetwork",
         activation="sigmoid",
         loss="mse",
         optimizer="sgd",
         metrics=None,
     ):
+        """
+        Create a simple, stochasitic gradient descent network of Dense
+        layers.
+
+        Args:
+            layers (list): a list of layer forms (see below)
+            name (str): a name for the network
+            activation (str): the name of a default activation function
+                if one is not given with layer.
+            loss (str): the name of a metric to use to compute loss (eg, error)
+            optimizer (str or Optimizer): the name of an optimizer or an actual
+                 Optimizer instance
+            metrics (list): a list of metrics to compute in addition to
+                "accuracy" and "tolerance_accuracy".
+
+        Layers may be given in the following formats:
+            * int: the number of units in the layer
+            * (int, str): number of units, and activation function (non-input layers
+                only)
+            * (int, int, ...): (input layers only) the shape of the input patterns
+            * keras layer instance: an instance of a keras layer, like Flatten()
+        """
         from tensorflow.keras.models import Model
         from tensorflow.keras.layers import Dense, Flatten, Input, Layer
 
@@ -2673,18 +2694,16 @@ class SimpleNetwork(Network):
             else:
                 return "hidden_%d" % index
 
-        def make_layer(index, layer_sizes, activation):
-            if isinstance(layer_sizes[index], Layer):
-                return layer_sizes[index]
+        def make_layer(index, layers, activation):
+            if isinstance(layers[index], Layer):
+                return layers[index]
             else:
-                name = make_name(index, len(layer_sizes))
+                name = make_name(index, len(layers))
                 if index == 0:
-                    size = layer_sizes[index]
+                    size = layers[index]
                     return Input(size, name=name)
-                elif layer_sizes[index] in ["flatten", "Flatten"]:
-                    return Flatten(name=name)
                 else:
-                    size = layer_sizes[index]
+                    size = layers[index]
                     if isinstance(size, int):
                         activation_function = activation
                     elif len(size) == 2 and isinstance(size[1], str):
@@ -2694,8 +2713,8 @@ class SimpleNetwork(Network):
                     return Dense(size, activation=activation_function, name=name)
 
         layers = [
-            make_layer(index, layer_sizes, activation)
-            for index in range(len(layer_sizes))
+            make_layer(index, layers, activation)
+            for index in range(len(layers))
         ]
         current_layer = layers[0]
         for layer in layers[1:]:

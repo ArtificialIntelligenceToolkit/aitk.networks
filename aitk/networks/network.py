@@ -406,11 +406,11 @@ class Network:
             if (self._epoch % report_rate) != 0:
                 return
 
-        index = random.randint(0, self.get_input_length(self._fit_inputs) - 1)
-        inputs = self.get_input_from_dataset(index, self._fit_inputs)
-        targets = self.get_target_from_dataset(index, self._fit_targets)
-
-        self.propagate(inputs, targets) # update watchers
+        if len(self._watchers) > 0:
+            index = random.randint(0, self.get_input_length(self._fit_inputs) - 1)
+            inputs = self.get_input_from_dataset(index, self._fit_inputs)
+            targets = self.get_target_from_dataset(index, self._fit_targets)
+            self.propagate(inputs, targets) # update watchers
 
         metrics = [list(history[1].keys()) for history in self._history["metrics"]]
         metrics = set([item for sublist in metrics for item in sublist])

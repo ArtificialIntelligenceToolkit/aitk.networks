@@ -1137,7 +1137,7 @@ class Network:
                             (row + 1) * size - 1,
                             (col + 1) * size - 1,
                         ),
-                        fill=tuple(vector[col][row]),
+                        fill=self._make_color(vector[col][row]),
                         outline="black",
                     )
         else:
@@ -1152,6 +1152,12 @@ class Network:
             ):
                 image = image.rotate(90, expand=1)
         return image
+
+    def _make_color(self, item):
+        if isinstance(item, numbers.Number):
+            return (item, item, item)
+        else:
+            return tuple(item)
 
     def _get_input_layers(self):
         return tuple(
@@ -2433,7 +2439,7 @@ class Network:
                 else:
                     # Change aspect ratio if too big/small
                     if width < image_pixels_per_unit:
-                        width = image_pixels_per_unit
+                        width = image_maxdim
                     if height < image_pixels_per_unit:
                         height = image_pixels_per_unit
                     # make sure not too big:
@@ -2682,7 +2688,8 @@ class SimpleNetwork(Network):
             * keras layer instance: an instance of a keras layer, like Flatten()
         """
         from tensorflow.keras.models import Model
-        from tensorflow.keras.layers import Dense, Flatten, Input, Layer
+        from tensorflow.keras.layers import Dense, Input, Layer
+        import tensorflow.keras.layers
 
         def make_name(index, total):
             if index == 0:
@@ -2697,6 +2704,10 @@ class SimpleNetwork(Network):
         def make_layer(index, layers, activation):
             if isinstance(layers[index], Layer):
                 return layers[index]
+            elif (isinstance(layers[index], str) and
+                  hasattr(tensorflow.keras.layers, layers[index])):
+                layer_class = getattr(tensorflow.keras.layers, layers[index])
+                return layer_class()
             else:
                 name = make_name(index, len(layers))
                 if index == 0:

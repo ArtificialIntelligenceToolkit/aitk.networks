@@ -573,7 +573,7 @@ class Network:
         """
         input_vectors = self._extract_inputs(inputs, self.input_bank_order)
         try:
-            outputs = self._model.predict(input_vectors)
+            outputs = self._model(input_vectors, training=False).numpy()
         except Exception as exc:
             input_layers_shapes = [
                 self._get_raw_output_shape(layer_name) for layer_name in self.input_bank_order
@@ -765,7 +765,7 @@ class Network:
         model = self._predict_models[input_names, layer_name]
         input_vectors = self._extract_inputs(inputs, input_names)
         try:
-            outputs = model.predict(input_vectors)
+            outputs = model(input_vectors, training=False).numpy()
         except Exception as exc:
             input_layers_shapes = [
                 self._get_raw_output_shape(layer_name) for layer_name in input_names
@@ -804,7 +804,7 @@ class Network:
                 current = self[layer_name](current)
             self._predict_models[key] = Model(inputs=input_layer, outputs=current)
         model = self._predict_models[key]
-        return model.predict(inputs)
+        return model(inputs, training=False).numpy()
 
 
     def display_colormap(self, colormap=None):
@@ -981,7 +981,7 @@ class Network:
         if show:
             for watcher in self._watchers:
                 watcher.update(inputs, targets)
-        return self._model.predict(self.input_to_dataset(inputs))
+        return self._model(self.input_to_dataset(inputs), training=False).numpy()
 
     def propagate_each(self,
                inputs=None,
@@ -2303,7 +2303,7 @@ class Network:
         image_dims = {}
         # if targets, then need to propagate for error:
         if targets is not None:
-            outputs = self.predict(inputs)
+            outputs = self._model(inputs, training=False).numpy()
             if len(self.output_bank_order) == 1:
                 targets = [targets]
                 errors = (np.array(outputs) - np.array(targets)).tolist()

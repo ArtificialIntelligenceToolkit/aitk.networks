@@ -982,6 +982,8 @@ class Network:
             for watcher in self._watchers:
                 watcher.update(inputs, targets)
         dataset = self.input_to_dataset(inputs)
+        # FIXME: rather than just the first, format in case
+        # of multiple output layers
         return self._model(dataset, training=False)[0].numpy()
 
     def propagate_each(self,

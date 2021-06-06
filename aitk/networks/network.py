@@ -981,7 +981,8 @@ class Network:
         if show:
             for watcher in self._watchers:
                 watcher.update(inputs, targets)
-        return self._model(self.input_to_dataset(inputs), training=False).numpy()
+        dataset = self.input_to_dataset(inputs)
+        return self._model(dataset, training=False)[0].numpy()
 
     def propagate_each(self,
                inputs=None,
@@ -2749,3 +2750,10 @@ class SimpleNetwork(Network):
             )
         else:
             return optimizer
+
+    def clear_watchers(self):
+        """
+        Remove all of the watchers of this network, including
+        weights, etc.
+        """
+        self._watchers[:] = []

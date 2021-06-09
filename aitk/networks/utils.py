@@ -445,3 +445,16 @@ def get_argument_bindings(function, args, kwargs):
     ]
     # Returns OrderedDict:
     return binding.arguments
+
+
+def is_keras_tensor(item):
+    """
+    Wrapper around a stupid Keras function that
+    crashes when it can't handle something, like an int.
+    """
+    import tensorflow.keras.backend as K
+
+    try:
+        return K.is_keras_tensor(item)
+    except Exception:
+        return False

@@ -2692,6 +2692,7 @@ class SimpleNetwork(Network):
         """
         from tensorflow.keras.models import Model
         from tensorflow.keras.layers import Dense, Input, Layer
+        import tensorflow.keras.backend as K
         import tensorflow.keras.layers
 
         def make_name(index, total):
@@ -2705,7 +2706,7 @@ class SimpleNetwork(Network):
                 return "hidden_%d" % index
 
         def make_layer(index, layers, activation):
-            if isinstance(layers[index], Layer):
+            if isinstance(layers[index], Layer) or K.is_keras_tensor(layers[index]):
                 return layers[index]
             elif (isinstance(layers[index], str) and
                   hasattr(tensorflow.keras.layers, layers[index])):

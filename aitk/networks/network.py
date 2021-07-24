@@ -38,6 +38,8 @@ from .utils import (
     topological_sort,
 )
 
+from aitk.utils import array_to_image
+
 try:
     from IPython.display import HTML, clear_output, display
 except ImportError:
@@ -566,11 +568,9 @@ class Network:
         return self._model.compile(*args, **kwargs)
 
 
-    def predict(self, inputs, format="numpy"):
+    def predict(self, inputs):
         """
         Propagate input patterns to a bank in the network.
-
-        * format: (str) "numpy", "list", or "image"
         """
         input_vectors = self._extract_inputs(inputs, self.input_bank_order)
         try:
@@ -590,10 +590,7 @@ class Network:
                 % hints
             ) from None
 
-        if format == "numpy":
-            return outputs
-        elif format == "list":
-            return outputs.tolist()
+        return outputs
 
     def set_pca_spaces(self, inputs):
         """
@@ -657,7 +654,7 @@ class Network:
         targets=None,
         show_error=False,
         show_targets=False,
-        format=None,
+        return_type=None,
         rotate=False,
         scale=None,
         clear=True,
@@ -683,28 +680,28 @@ class Network:
         except KeyboardInterrupt:
             raise KeyboardInterrupt() from None
 
-        if format is None:
+        if return_type is None:
             try:
                 get_ipython()  # noqa: F821
-                format = "html"
+                return_type = "html"
             except Exception:
-                format = "image"
+                return_type = "image"
 
-        if format == "html":
+        if return_type == "html":
             if HTML is not None:
                 if clear:
                     clear_output(wait=True)
                 display(HTML(svg))
             else:
                 raise Exception(
-                    "need to install `IPython` or use Network.predict_pca(format='image')"
+                    "need to install `IPython` or use Network.predict_pca(return_type='image')"
                 )
-        elif format == "svg":
+        elif return_type == "svg":
             return svg
-        elif format == "image":
+        elif return_type == "image":
             return svg_to_image(svg, self.config)
         else:
-            raise ValueError("unable to convert to format %r" % format)
+            raise ValueError("unable to convert to return_type %r" % return_type)
 
 
     def predict_histogram(
@@ -713,7 +710,7 @@ class Network:
         targets=None,
         show_error=False,
         show_targets=False,
-        format=None,
+        return_type=None,
         rotate=False,
         scale=None,
         clear=True,
@@ -732,35 +729,40 @@ class Network:
         except KeyboardInterrupt:
             raise KeyboardInterrupt() from None
 
-        if format is None:
+        if return_type is None:
             try:
                 get_ipython()  # noqa: F821
-                format = "html"
+                return_type = "html"
             except Exception:
-                format = "image"
+                return_type = "image"
 
-        if format == "html":
+        if return_type == "html":
             if HTML is not None:
                 if clear:
                     clear_output(wait=True)
                 display(HTML(svg))
             else:
                 raise Exception(
-                    "need to install `IPython` or use Network.predict_pca(format='image')"
+                    "need to install `IPython` or use Network.predict_pca(return_type='image')"
                 )
-        elif format == "svg":
+        elif return_type == "svg":
             return svg
-        elif format == "image":
+        elif return_type == "image":
             return svg_to_image(svg, self.config)
         else:
-            raise ValueError("unable to convert to format %r" % format)
+            raise ValueError("unable to convert to return_type %r" % return_type)
 
 
-    def predict_to(self, inputs, layer_name, format="numpy"):
+    def predict_to(self, inputs, layer_name):
         """
         Propagate input patterns to a bank in the network.
 
-        * format: (str) "numpy", "list", or "image"
+        Args:
+            inputs (dataset): a dataset of inputs
+            layer_name (str): layer name to predict to
+
+        Returns:
+            a numpy array
         """
         input_names = self._input_layer_names[layer_name]
         model = self._predict_models[input_names, layer_name]
@@ -782,12 +784,7 @@ class Network:
                 % hints
             ) from None
 
-        if format == "numpy":
-            return outputs
-        elif format == "image":
-            return self.make_image(layer_name, outputs)
-        elif format == "list":
-            return outputs.tolist()
+        return outputs
 
     def predict_from(self, inputs, from_layer_name, to_layer_name):
         """
@@ -806,7 +803,6 @@ class Network:
             self._predict_models[key] = Model(inputs=input_layer, outputs=current)
         model = self._predict_models[key]
         return model(inputs, training=False).numpy()
-
 
     def display_colormap(self, colormap=None):
         """
@@ -835,7 +831,7 @@ class Network:
         targets=None,
         show_error=False,
         show_targets=False,
-        format="image",
+        return_type="image",
         rotate=False,
         scale=None,
         **config,
@@ -850,7 +846,7 @@ class Network:
             targets: target values to show
             show_error (bool): show the output error in resulting picture
             show_targets (bool): show the targets in resulting picture
-            format (str): optional "html", "image", or "svg"
+            return_type (str): optional "html", "image", or "svg"
 
         Examples:
             >>> net = Network("Picture", 2, 2, 1)
@@ -877,12 +873,12 @@ class Network:
         except KeyboardInterrupt:
             raise KeyboardInterrupt() from None
 
-        if format == "svg":
+        if return_type == "svg":
             return svg
-        elif format == "image":
+        elif return_type == "image":
             return svg_to_image(svg, self.config)
         else:
-            raise ValueError("unable to convert to format %r" % format)
+            raise ValueError("unable to convert to return_type %r" % return_type)
 
     def display(
         self,
@@ -890,20 +886,20 @@ class Network:
         targets=None,
         show_error=False,
         show_targets=False,
-        format=None,
+        return_type=None,
         rotate=False,
         scale=None,
         clear=True,
         **config,
     ):
-        if format is None:
+        if return_type is None:
             try:
                 get_ipython()  # noqa: F821
-                format = "html"
+                return_type = "html"
             except Exception:
-                format = "image"
+                return_type = "image"
 
-        if format == "html":
+        if return_type == "html":
             svg = self.get_image(inputs, targets, show_error, show_targets, "svg",
                                  rotate, scale, **config)
             if HTML is not None:
@@ -912,10 +908,10 @@ class Network:
                 display(HTML(svg))
             else:
                 raise Exception(
-                    "need to install `IPython` or use Network.display(format='image')"
+                    "need to install `IPython` or use Network.display(return_type='image')"
                 )
         else:
-            image = self.get_image(inputs, targets, show_error, show_targets, format,
+            image = self.get_image(inputs, targets, show_error, show_targets, return_type,
                                    rotate, scale, **config)
             return image
 
@@ -971,7 +967,7 @@ class Network:
         display(widget)
 
     def propagate(self,
-                  inputs=None,
+                  inputs,
                   targets=None,
                   show=True,
     ):
@@ -986,6 +982,24 @@ class Network:
         # FIXME: rather than just the first, format in case
         # of multiple output layers
         return self._model(dataset, training=False)[0].numpy()
+
+    def propagate_to(self,
+                     inputs,
+                     layer_name,
+                     return_type=None,
+                     channel=None,
+    ):
+        dataset = self.input_to_dataset(inputs)
+        # FIXME: rather than just the first, format in case
+        # of multiple output layers
+        array = self.predict_to(dataset, layer_name)
+        # FIXME: get output banks
+        # Strip out just the single return row from one bank
+        array = array[0]
+        if return_type == "image":
+            return self._layer_array_to_image(layer_name, array, channel=channel)
+        else:
+            return array
 
     def propagate_each(self,
                inputs=None,
@@ -1051,19 +1065,6 @@ class Network:
                     self._get_input_tensors(layer.name, input_list)
         return input_list
 
-    def make_dummy_vector(self, layer_name):
-        """
-        """
-        shape = self._get_output_shape(layer_name)
-        if (shape is None) or (isinstance(shape, (list, tuple)) and None in shape):
-            v = np.random.rand(100)
-        else:
-            v = np.random.rand(*shape)
-
-        color, lo, hi = self._get_colormap(layer_name)
-        # scale the vector to the min and the max of this layer:
-        return np.interp(v, (v.min(), v.max()), (lo, hi))
-
     def make_image(self, layer_name, vector, colormap=None):
         """
         Given an activation name (or function), and an output vector, display
@@ -1071,82 +1072,8 @@ class Network:
         """
         import tensorflow.keras.backend as K
 
-        vshape = self.vshape(layer_name)
-        if vshape and vshape != self._get_output_shape(layer_name):
-            vector = vector.reshape(vshape)
-        if len(vector.shape) > 2:
-            # Drop dimensions of vector:
-            s = slice(None, None)
-            args = []
-            # The data is in the same format as Keras
-            # so we can ask Keras what that format is:
-            # ASSUMES: that the network that loaded the
-            # dataset has the same image_data_format as
-            # now:
-            if K.image_data_format() == "channels_last":
-                for d in range(len(vector.shape)):
-                    if d in [0, 1]:
-                        args.append(s)  # keep the first two
-                    else:
-                        args.append(self._get_feature(layer_name))  # pick which to use
-            else:  # 'channels_first'
-                count = 0
-                for d in range(len(vector.shape)):
-                    if d in [0]:
-                        args.append(self._get_feature(layer_name))  # pick which to use
-                    else:
-                        if count < 2:
-                            args.append(s)
-                            count += 1
-            vector = vector[tuple(args)]
-        if colormap is None:
-            color, mini, maxi = self._get_colormap(layer_name)
-        else:
-            color, mini, maxi = colormap
-        vector = scale_output_for_image(
-            vector, (mini, maxi), truncate=True
-        )
-        if len(vector.shape) == 1:
-            vector = vector.reshape((1, vector.shape[0]))
-        size = self.config.get("pixels_per_unit", 1)
-        new_width = vector.shape[0] * size  # in, pixels
-        new_height = vector.shape[1] * size  # in, pixels
-        if color == "color":
-            # don't colormap it
-            pass
-        else:
-            try:
-                cm_hot = cm.get_cmap(color)
-            except Exception:
-                cm_hot = cm.get_cmap("gray")
-            vector = cm_hot(vector)
-            vector = np.uint8(vector * 255)
-        if max(vector.shape) <= self.config["max_draw_units"]:
-            # Need to make it bigger, to draw circles:
-            # Make this value too small, and borders are blocky;
-            # too big and borders are too thin
-            scale = int(250 / max(vector.shape))
-            size = size * scale
-            image = Image.new(
-                "RGBA", (new_height * scale, new_width * scale), color="white"
-            )
-            draw = ImageDraw.Draw(image)
-            for row in range(vector.shape[1]):
-                for col in range(vector.shape[0]):
-                    # upper-left, lower-right:
-                    draw.rectangle(
-                        (
-                            row * size,
-                            col * size,
-                            (row + 1) * size - 1,
-                            (col + 1) * size - 1,
-                        ),
-                        fill=self._make_color(vector[col][row]),
-                        outline="black",
-                    )
-        else:
-            image = Image.fromarray(vector)
-            image = image.resize((new_height, new_width))
+        image = self._layer_array_to_image(layer_name, vector)
+        #image = image.resize((new_height, new_width))
         # If rotated, and has features, rotate it:
         if self.config.get("rotate", False):
             output_shape = self._get_output_shape(layer_name)
@@ -1155,6 +1082,31 @@ class Network:
                 vshape is not None and len(vshape) == 2
             ):
                 image = image.rotate(90, expand=1)
+        return image
+
+    def _layer_array_to_image(self, layer_name, vector, channel=None):
+        layer = self[layer_name]
+        class_name = self[layer_name].__class__.__name__
+        if class_name in ["Dense", "Flatten", "InputLayer"]:
+            pass # known layer type, single instance
+        elif class_name in ["Conv2D", "MaxPooling2D"]:
+            if channel is None:
+                channel = self._get_feature(layer_name)
+            select = tuple([slice(None) for i in range(len(vector.shape) - 1)] + [slice(channel, channel+1)])
+            vector = vector[select]
+        else:
+            pass # let's try it as is
+
+        try:
+            image = array_to_image(vector)
+        except Exception:
+            image = array_to_image([[[255, 0, 0]], [[255, 0, 0]]])
+
+        # If vshape is given, then resize the image:
+        vshape = self.vshape(layer_name)
+        if vshape and vshape != image.size:
+            image = image.resize(vshape)
+
         return image
 
     def _make_color(self, item):
@@ -1206,7 +1158,7 @@ class Network:
         ):
             return self.config["layers"][layer_name]["feature"]
         else:
-            return slice(None, None)
+            return 0
 
     def _get_keep_aspect_ratio(self, layer_name):
         if (
@@ -2348,18 +2300,6 @@ class Network:
                 # The rest of this for loop is handling image of bank
                 if inputs is not None:
                     v = inputs
-                # elif len(self.dataset.inputs) > 0 and not isinstance(self.dataset, VirtualDataset):
-                #    # don't change cache if virtual... could take some time to rebuild cache
-                #    v = self.dataset.inputs[0]
-                # else:
-                # if False:  # FIXME not compiled
-                #    if len(self.input_bank_order) > 1:
-                #        v = []
-                #        for in_name in self.input_bank_order:
-                #            v.append(self.make_dummy_vector(in_name))
-                #    else:
-                #        in_layer_name = self.input_bank_order[0]
-                #        v = self.make_dummy_vector(in_layer_name)
                 keep_aspect_ratio = None
                 if mode == "pca":
                     image = self.predict_pca_to(v, layer_name, colors, sizes)
@@ -2367,16 +2307,10 @@ class Network:
                 elif mode == "histogram":
                     image = self.predict_histogram_to(v, layer_name)
                     keep_aspect_ratio = True
-                else: # activations
-                    try:
-                        # FIXME get one per output bank:
-                        image = self.make_image(
-                            layer_name, self.predict_to(v, layer_name)[0]
-                        )
-                    except Exception:
-                        image = self.make_image(
-                            layer_name, np.array(self.make_dummy_vector(layer_name)),
-                        )
+                else: # activations of a single input
+                    image = self.make_image(
+                        layer_name, self.predict_to(v, layer_name)[0]
+                    )
                 (width, height) = image.size
                 images[layer_name] = image  # little image
                 if self._get_layer_type(layer_name) == "output":
@@ -2400,19 +2334,8 @@ class Network:
                     else:
                         images[layer_name + "_errors"] = image
                         images[layer_name + "_targets"] = image
-                # Layer settings:
-                # FIXME:
-                # if self[layer_name].image_maxdim:
-                #    image_maxdim = self[layer_name].image_maxdim
-                # else:
                 image_maxdim = self.config["image_maxdim"]
-                # FIXME:
-                # if self[layer_name].image_pixels_per_unit:
-                #    image_pixels_per_unit = self[layer_name].image_pixels_per_unit
-                # else:
                 image_pixels_per_unit = self.config["image_pixels_per_unit"]
-                # First, try based on shape:
-                # pwidth, pheight = np.array(image.size) * image_pixels_per_unit
                 vshape = self.vshape(layer_name)
                 keep_aspect_ratio = (keep_aspect_ratio if keep_aspect_ratio is not None
                                      else self._get_keep_aspect_ratio(layer_name))

@@ -157,7 +157,7 @@ class NetworkWatcher():
         if inputs is None and targets is None:
             return
 
-        svg = self.network.get_image(inputs, targets, format="svg", **self._widget_kwargs)
+        svg = self.network.get_image(inputs, targets, return_type="svg", **self._widget_kwargs)
 
         # Watched items get a border
         # Need width and height; we get it out of svg:
@@ -187,7 +187,7 @@ class NetworkWatcher():
         if scale is not None:
             self._widget_kwargs["scale"] = scale
 
-        svg = self.network.get_image(format="svg", **self._widget_kwargs)
+        svg = self.network.get_image(return_type="svg", **self._widget_kwargs)
 
         # Watched items get a border
         # Need width and height; we get it out of svg:

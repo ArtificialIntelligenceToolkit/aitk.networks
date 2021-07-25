@@ -2300,6 +2300,8 @@ class Network:
                 # The rest of this for loop is handling image of bank
                 if inputs is not None:
                     v = inputs
+                else:
+                    v = np.array([self.make_dummy_vector(layer_name)])
                 keep_aspect_ratio = None
                 if mode == "pca":
                     image = self.predict_pca_to(v, layer_name, colors, sizes)
@@ -2308,9 +2310,15 @@ class Network:
                     image = self.predict_histogram_to(v, layer_name)
                     keep_aspect_ratio = True
                 else: # activations of a single input
-                    image = self.make_image(
-                        layer_name, self.predict_to(v, layer_name)[0]
-                    )
+                    try:
+                        image = self.make_image(
+                            layer_name, self.predict_to(v, layer_name)[0]
+                        )
+                    except Exception:
+                        image = array_to_image([[
+                            [255, 0, 0],
+                            [255, 0, 0],
+                        ]])
                 (width, height) = image.size
                 images[layer_name] = image  # little image
                 if self._get_layer_type(layer_name) == "output":
@@ -2380,6 +2388,18 @@ class Network:
             row_heights.append(row_height)
             max_width = max(max_width, row_width)  # of all rows
         return max_width, max_height, row_heights, images, image_dims
+
+
+    def make_dummy_vector(self, layer_name):
+        """
+        Make a stand-in vector for this layer.
+        """
+        shape = self._get_output_shape(layer_name)
+        if (shape is None) or (isinstance(shape, (list, tuple)) and None in shape):
+            v = np.random.rand(100)
+        else:
+            v = np.random.rand(*shape)
+        return v
 
     def set_config(self, **items):
         """

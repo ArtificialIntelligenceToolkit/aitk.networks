@@ -822,7 +822,7 @@ class Network:
             vector = cm_hot(vector)
             vector = np.uint8(vector * 255)
             image = Image.fromarray(vector)
-            image = image.resize((width, height))
+            image = image.resize((width, height), 0)
             return image
 
     def get_image(
@@ -1073,7 +1073,6 @@ class Network:
         import tensorflow.keras.backend as K
 
         image = self._layer_array_to_image(layer_name, vector)
-        #image = image.resize((new_height, new_width))
         # If rotated, and has features, rotate it:
         if self.config.get("rotate", False):
             output_shape = self._get_output_shape(layer_name)
@@ -1105,7 +1104,7 @@ class Network:
         # If vshape is given, then resize the image:
         vshape = self.vshape(layer_name)
         if vshape and vshape != image.size:
-            image = image.resize(vshape)
+            image = image.resize(vshape, 0)
 
         return image
 
@@ -2344,44 +2343,22 @@ class Network:
                         images[layer_name + "_targets"] = image
                 image_maxdim = self.config["image_maxdim"]
                 image_pixels_per_unit = self.config["image_pixels_per_unit"]
-                vshape = self.vshape(layer_name)
-                keep_aspect_ratio = (keep_aspect_ratio if keep_aspect_ratio is not None
-                                     else self._get_keep_aspect_ratio(layer_name))
-                if vshape is None or keep_aspect_ratio:
-                    pass  # let the image set the shape
-                elif len(vshape) == 1:
-                    if vshape[0] is not None:
-                        width = vshape[0] * image_pixels_per_unit
-                        height = image_pixels_per_unit
-                elif len(vshape) >= 2:
-                    if vshape[0] is not None:
-                        height = vshape[0] * image_pixels_per_unit
-                        if vshape[1] is not None:
-                            width = vshape[1] * image_pixels_per_unit
-                    else:
-                        if len(vshape) > 2:
-                            if vshape[1] is not None:
-                                height = vshape[1] * image_pixels_per_unit
-                                width = vshape[2] * image_pixels_per_unit
-                        elif vshape[1] is not None:  # flatten
-                            width = vshape[1] * image_pixels_per_unit
-                            height = image_pixels_per_unit
-                # keep aspect ratio:
-                if keep_aspect_ratio:
-                    scale = image_maxdim / max(width, height)
-                    image = image.resize((int(width * scale), int(height * scale)))
-                    width, height = image.size
-                else:
-                    # Change aspect ratio if too big/small
-                    if width < image_pixels_per_unit:
-                        width = image_maxdim
-                    if height < image_pixels_per_unit:
-                        height = image_pixels_per_unit
-                    # make sure not too big:
-                    if height > image_maxdim:
-                        height = image_maxdim
-                    if width > image_maxdim:
-                        width = image_maxdim
+                # Keep it within range:
+                width = width * image_pixels_per_unit
+                height = height * image_pixels_per_unit
+                if width > image_maxdim:
+                    # scale both down
+                    scale = image_maxdim / width
+                    width = width * scale
+                    height = height * scale
+                elif height > image_maxdim:
+                    scale = image_maxdim / height
+                    height = height * scale
+                    width = width * scale
+                # Now, make sure either isn't too big or too small:
+                width = max(min(image_maxdim, width), image_pixels_per_unit)
+                height = max(min(image_maxdim, height), image_pixels_per_unit)
+                # Record the width and height:
                 image_dims[layer_name] = (width, height)
                 row_width += width + self.config["hspace"]  # space between
                 row_height = max(row_height, height)

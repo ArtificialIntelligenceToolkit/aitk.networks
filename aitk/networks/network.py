@@ -1091,7 +1091,7 @@ class Network:
             pass # let's try it as is
 
         try:
-            image = array_to_image(vector)
+            image = array_to_image(vector, minmax=self._get_act_minmax(layer_name))
         except Exception:
             image = array_to_image([[[255, 0, 0]], [[255, 0, 0]]])
 

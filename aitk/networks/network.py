@@ -88,11 +88,10 @@ class Network:
             "font_color_layer_name": "blue",  # for svg
             "border_top": 25,  # for svg
             "border_bottom": 25,  # for svg
-            "hspace": 150,  # for svg
+            "hspace": 200,  # for svg
             "vspace": 30,  # for svg, arrows
-            "image_maxdim": 200,  # for svg
-            "image_pixels_per_unit": 50,  # for svg
-            "max_draw_units": 20,
+            "max_pixels": 200,  # for svg
+            "pixels": 50,  # for svg
             "activation": "linear",  # Dense default, if none specified
             "arrow_color": "black",
             "arrow_width": "2",
@@ -101,17 +100,12 @@ class Network:
             "background_color": "#B0C4DE",  # must use hex format here
             "show_targets": False,
             "show_error": False,
-            "pixels_per_unit": 1,
             "precision": 2,
             "scale": None,  # for svg, 0 - 1, or None for optimal
             "rotate": False,  # for rotating SVG
             "smoothing": 0.02,  # smoothing curves
             "preferred_size": 400,  # in pixels
             "max_width": 800,  # in pixels
-            "dashboard.dataset": "Train",
-            "dashboard.features.bank": "",
-            "dashboard.features.columns": 3,
-            "dashboard.features.scale": 1.0,
             "layers": {},
             # layer_name: {vshape, feature, keep_aspect_ratio, visible
             # colormap, border_color, border_width}
@@ -2348,23 +2342,23 @@ class Network:
                     else:
                         images[layer_name + "_errors"] = image
                         images[layer_name + "_targets"] = image
-                image_maxdim = self.config["image_maxdim"]
-                image_pixels_per_unit = self.config["image_pixels_per_unit"]
+                max_pixels = self.config["max_pixels"]
+                pixels = self.config["pixels"]
                 # Keep it within range:
-                width = width * image_pixels_per_unit
-                height = height * image_pixels_per_unit
-                if width > image_maxdim:
+                width = width * pixels
+                height = height * pixels
+                if width > max_pixels:
                     # scale both down
-                    scale = image_maxdim / width
+                    scale = max_pixels / width
                     width = width * scale
                     height = height * scale
-                elif height > image_maxdim:
-                    scale = image_maxdim / height
+                elif height > max_pixels:
+                    scale = max_pixels / height
                     height = height * scale
                     width = width * scale
                 # Now, make sure either isn't too big or too small:
-                width = max(min(image_maxdim, width), image_pixels_per_unit)
-                height = max(min(image_maxdim, height), image_pixels_per_unit)
+                width = max(min(max_pixels, width), pixels)
+                height = max(min(max_pixels, height), pixels)
                 # Record the width and height:
                 image_dims[layer_name] = (width, height)
                 row_width += width + self.config["hspace"]  # space between

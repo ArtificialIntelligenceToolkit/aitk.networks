@@ -1143,6 +1143,13 @@ class Network:
         else:
             return layer.output_shape[1:]
 
+    def _get_input_shape(self, layer_name):
+        layer = self[layer_name]
+        if isinstance(layer.input_shape, list):
+            return layer.input_shape[0][1:]
+        else:
+            return layer.input_shape[1:]
+
     def _get_raw_output_shape(self, layer_name):
         layer = self[layer_name]
         return layer.output_shape
@@ -1419,6 +1426,7 @@ class Network:
         return svg
 
     def build_struct(self, inputs, targets, mode, colors, sizes):
+        # inputs, targets are full datasets
         ordering = list(
             reversed(self._level_ordering)
         )  # list of names per level, input to output
@@ -2251,12 +2259,15 @@ class Network:
         """
         # find max_width, image_dims, and row_height
         # Go through and build images, compute max_width:
+        # inputs is full dataset
         row_heights = []
         max_width = 0
         max_height = 0
         images = {}
         image_dims = {}
         # if targets, then need to propagate for error:
+        if inputs is None:
+            inputs = self.make_dummy_dataset()
         if targets is not None:
             outputs = self._model(inputs, training=False).numpy()
             if len(self.output_bank_order) == 1:
@@ -2297,21 +2308,17 @@ class Network:
                     continue
                 hiding[column] = False
                 # The rest of this for loop is handling image of bank
-                if inputs is not None:
-                    v = inputs
-                else:
-                    v = np.array([self.make_dummy_vector(layer_name)])
                 keep_aspect_ratio = None
                 if mode == "pca":
-                    image = self.predict_pca_to(v, layer_name, colors, sizes)
+                    image = self.predict_pca_to(inputs, layer_name, colors, sizes)
                     keep_aspect_ratio = True
                 elif mode == "histogram":
-                    image = self.predict_histogram_to(v, layer_name)
+                    image = self.predict_histogram_to(inputs, layer_name)
                     keep_aspect_ratio = True
-                else: # activations of a single input
+                else: # activations of a dataset
                     try:
                         image = self.make_image(
-                            layer_name, self.predict_to(v, layer_name)[0]
+                            layer_name, self.predict_to(inputs, layer_name)[0]
                         )
                     except Exception:
                         image = array_to_image([[
@@ -2367,16 +2374,20 @@ class Network:
         return max_width, max_height, row_heights, images, image_dims
 
 
-    def make_dummy_vector(self, layer_name):
+    def make_dummy_dataset(self):
         """
-        Make a stand-in vector for this layer.
+        Make a stand-in dataset for this network:
         """
-        shape = self._get_output_shape(layer_name)
-        if (shape is None) or (isinstance(shape, (list, tuple)) and None in shape):
-            v = np.random.rand(100)
-        else:
-            v = np.random.rand(*shape)
-        return v
+        inputs = []
+        for layer_name in self.input_bank_order:
+            shape = self._get_input_shape(layer_name)
+            if (shape is None) or (isinstance(shape, (list, tuple))
+                                   and None in shape):
+                v = np.random.rand(100)
+            else:
+                v = np.random.rand(*shape)
+            inputs.append(np.array([v]))
+        return inputs
 
     def set_config(self, **items):
         """

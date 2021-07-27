@@ -213,22 +213,18 @@ class Network:
             # Now we set the minmax for input layer, based on past values
             # or extremes:
             for layer in self._layers:
-                if self._get_layer_type(layer.name) == "input":
-                    outputs = self.predict_to(input_dataset, layer.name)
-                    color_orig, min_orig, max_orig = self.config["layers"][layer.name]["colormap"]
-                    min_new, max_new = (
-                        min(outputs.min(), min_orig),
-                        max(outputs.max(), max_orig),
+                outputs = self.predict_to(input_dataset, layer.name)
+                color_orig, min_orig, max_orig = self.config["layers"][layer.name]["colormap"]
+                min_new, max_new = math.floor(outputs.min()), math.ceil(outputs.max())
+                if min_new != max_new:
+                    self.config["layers"][layer.name]["colormap"] = (color_orig, min_new, max_new)
+                else:
+                    # Don't let them be equal:
+                    self.config["layers"][layer.name]["colormap"] = (
+                        color_orig,
+                        min_new - 1,
+                        max_new + 1,
                     )
-                    if min_new != max_new:
-                        self.config["layers"][layer.name]["colormap"] = (color_orig, min_new, max_new)
-                    else:
-                        # Don't let them be equal:
-                        self.config["layers"][layer.name]["colormap"] = (
-                            color_orig,
-                            min_new - 1,
-                            max_new + 1,
-                        )
 
     def connect(self, from_layer_name=None, to_layer_name=None):
         """
@@ -1080,9 +1076,7 @@ class Network:
     def _layer_array_to_image(self, layer_name, vector, channel=None):
         layer = self[layer_name]
         class_name = self[layer_name].__class__.__name__
-        if class_name in ["Dense", "Flatten", "InputLayer"]:
-            pass # known layer type, single instance
-        elif class_name in ["Conv2D", "MaxPooling2D"]:
+        if class_name in ["Conv2D", "MaxPooling2D"]:
             if channel is None:
                 channel = self._get_feature(layer_name)
             select = tuple([slice(None) for i in range(len(vector.shape) - 1)] + [slice(channel, channel+1)])
@@ -1091,7 +1085,7 @@ class Network:
             pass # let's try it as is
 
         try:
-            image = array_to_image(vector, minmax=self._get_act_minmax(layer_name))
+            image = array_to_image(vector, minmax=self._layer_minmax(layer_name))
         except Exception:
             image = array_to_image([[[255, 0, 0]], [[255, 0, 0]]])
 
@@ -1176,10 +1170,14 @@ class Network:
 
         def format_range(minmax):
             minv, maxv = minmax
-            if minv <= -2:
+            if minv == -2:
                 minv = "-Infinity"
-            if maxv >= +2:
+            else:
+                minv = "%.1f" % minv
+            if maxv == +2:
                 maxv = "+Infinity"
+            else:
+                maxv = "%.1f" % maxv
             return "(%s, %s)" % (minv, maxv)
 
         layer = self[layer_name]
@@ -1193,6 +1191,9 @@ class Network:
             retval += "\nAct output range: %s" % (
                 format_range(self._get_act_minmax(layer_name),)
             )
+        retval += "\nActual minmax: %s" % (
+            format_range(self._layer_minmax(layer_name),)
+        )
         retval += "\nShape = %s" % (self._get_raw_output_shape(layer_name),)
         return retval
 
@@ -1217,6 +1218,13 @@ class Network:
     def _get_activation_name(self, layer):
         if hasattr(layer, "activation"):
             return layer.activation.__name__
+
+    def _layer_minmax(self, layer_name):
+        if layer_name in self.config["layers"]:
+            colormap_minmax = self.config["layers"][layer_name].get("colormap", None)
+            if colormap_minmax is not None:
+                return colormap_minmax[1:]
+        return self._get_act_minmax(layer_name)
 
     def _get_act_minmax(self, layer_name):
         """

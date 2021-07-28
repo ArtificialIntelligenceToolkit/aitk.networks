@@ -1073,10 +1073,13 @@ class Network:
                 image = image.rotate(90, expand=1)
         return image
 
-    def _layer_array_to_image(self, layer_name, vector, channel=None):
+    def _layer_has_channels(self, layer_name):
         layer = self[layer_name]
         class_name = self[layer_name].__class__.__name__
-        if class_name in ["Conv2D", "MaxPooling2D"]:
+        return class_name in ["Conv2D", "MaxPooling2D"]
+
+    def _layer_array_to_image(self, layer_name, vector, channel=None):
+        if self._layer_has_channels(layer_name):
             if channel is None:
                 channel = self._get_feature(layer_name)
             select = tuple([slice(None) for i in range(len(vector.shape) - 1)] + [slice(channel, channel+1)])
@@ -1840,13 +1843,8 @@ class Network:
                     ]
                 )
                 output_shape = self._get_output_shape(layer_name)
-                # FIXME: how to determine a layer that has images as input?
-                if (
-                    isinstance(output_shape, tuple)
-                    and len(output_shape) == 4
-                    and self[layer_name].__class__.__name__ != "ImageLayer"
-                ):
-                    features = str(output_shape[3])
+                if (self._layer_has_channels(layer_name)):
+                    features = str(output_shape[-1])
                     # FIXME:
                     feature = str(self._get_feature(layer_name))
                     if self.config["rotate"]:
@@ -1919,44 +1917,6 @@ class Network:
                                 },
                             ]
                         )
-                if False:  # (self[layer_name].dropout > 0): FIXME:
-                    struct.append(
-                        [
-                            "label_svg",
-                            {
-                                "x": positioning[layer_name]["x"]
-                                - 1 * 2.0
-                                - 18,  # length of chars * 2.0
-                                "y": positioning[layer_name]["y"] + 4,
-                                "label": "o",  # "&#10683;"
-                                "font_size": self.config["font_size"] * 2.0,
-                                "font_color": self.config["font_color"],
-                                "font_family": self.config["font_family"],
-                                "text_anchor": "start",
-                            },
-                        ]
-                    )
-                    struct.append(
-                        [
-                            "label_svg",
-                            {
-                                "x": positioning[layer_name]["x"]
-                                - 1 * 2.0
-                                - 15
-                                + (
-                                    -3 if self.config["rotate"] else 0
-                                ),  # length of chars * 2.0
-                                "y": positioning[layer_name]["y"]
-                                + 5
-                                + (-1 if self.config["rotate"] else 0),
-                                "label": "x",  # "&#10683;"
-                                "font_size": self.config["font_size"] * 1.3,
-                                "font_color": self.config["font_color"],
-                                "font_family": self.config["font_family"],
-                                "text_anchor": "start",
-                            },
-                        ]
-                    )
                 cwidth += width / 2
                 row_height = max(row_height, height)
             cheight += row_height

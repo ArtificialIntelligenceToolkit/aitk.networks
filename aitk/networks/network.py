@@ -136,6 +136,10 @@ class Network:
                 "pca": {},
             }
 
+    @property
+    def model(self):
+        return self._model
+
     def _show_connection_help(self):
         print("Connect layers with Network.connect(NAME, NAME) where NAMEs are in:")
         print("    ", list(self._pre_layers.keys()))
@@ -190,7 +194,6 @@ class Network:
         else:
             self._initialized = True
             input_dataset = self.input_to_dataset(inputs)
-            input_array = np.array(inputs)
             # If reset is true, we set to extremes so any value will adjust
             # Only do this on input layers:
             if reset:
@@ -198,18 +201,12 @@ class Network:
                     if self._get_layer_type(layer.name) == "input":
                         if layer.name not in self.config["layers"]:
                             self.config["layers"][layer.name] = {}
-                        if input_array.shape == 3 and input_array.shape[2] == 3:
-                            self.config["layers"][layer.name]["colormap"] = (
-                                "gray",
-                                float("+inf"), # extreme too big
-                                float("-inf"), # extreme too small
-                            )
-                        else:
-                            self.config["layers"][layer.name]["colormap"] = (
-                                "color",
-                                float("+inf"), # extreme too big
-                                float("-inf"), # extreme too small
-                            )
+                        # FIXME: set color at some point if image
+                        self.config["layers"][layer.name]["colormap"] = (
+                            "gray",
+                            float("+inf"), # extreme too big
+                            float("-inf"), # extreme too small
+                        )
             # Now we set the minmax for input layer, based on past values
             # or extremes:
             for layer in self._layers:
@@ -1090,6 +1087,7 @@ class Network:
         try:
             image = array_to_image(vector, minmax=self._layer_minmax(layer_name))
         except Exception:
+            # Error: make a red image
             image = array_to_image([[[255, 0, 0]], [[255, 0, 0]]])
 
         # If vshape is given, then resize the image:
@@ -2283,6 +2281,7 @@ class Network:
                             layer_name, self.predict_to(inputs, layer_name)[0]
                         )
                     except Exception:
+                        # Error: make a red image
                         image = array_to_image([[
                             [255, 0, 0],
                             [255, 0, 0],

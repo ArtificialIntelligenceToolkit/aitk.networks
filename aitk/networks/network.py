@@ -326,6 +326,7 @@ class Network:
             callbacks.append(make_stop("loss", val_loss, patience, True))
         kwargs["callbacks"] = callbacks
         kwargs["verbose"] = 0
+        kwargs["initial_epoch"] = self._epoch
 
         self._fit_inputs = kwargs.get("x", None) # inputs
         self._fit_targets = kwargs.get("y", None) # targets

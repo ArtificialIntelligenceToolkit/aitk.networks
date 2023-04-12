@@ -1085,16 +1085,16 @@ class Network:
         else:
             pass # let's try it as is
 
+        # If vshape is given, then resize the vector:
+        vshape = self.vshape(layer_name)
+        if vshape and vshape != vector.shape:
+            vector = vector.reshape(vshape)
+
         try:
             image = array_to_image(vector, minmax=self._layer_minmax(layer_name))
         except Exception:
             # Error: make a red image
             image = array_to_image([[[255, 0, 0]], [[255, 0, 0]]])
-
-        # If vshape is given, then resize the image:
-        vshape = self.vshape(layer_name)
-        if vshape and vshape != image.size:
-            image = image.resize(vshape, 0)
 
         return image
 
